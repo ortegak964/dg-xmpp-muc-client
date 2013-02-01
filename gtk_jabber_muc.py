@@ -1,7 +1,7 @@
 # v2.0, now with a nice UI and 1725% more comments stating the obvious!
 
 import '/time/strftime'
-import '/random/choice'
+import '/hashlib/md5'
 
 import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
@@ -83,9 +83,9 @@ wnd.add $ paneWidget
         GObject.idle_add () -> (a.set_value a.get_upper!) if
           max 0 (a.get_upper! - a.get_page_size!) - a.get_value! < 10
 
-      # log :: (TextBuffer, [(TextTag, Stanza -> str)]) -> dict str object -> str
+      # log :: (TextBuffer, (Stanza, (str, TextTag) -> ()) -> IO ()) -> Stanza -> IO ()
       #
-      # Given a buffer and a list of format instructions, create a logging function.
+      # Given a buffer and a formatter, create a logging function.
       #
       log = (buffer fmt) -> bind (delegate fmt) (a b) -> (buffer.insert_with_tags_by_name buffer.get_end_iter! a b)
 
@@ -117,8 +117,24 @@ wnd.add $ paneWidget
       buffer.create_tag 'joined'    foreground: '#119900' weight: Pango.Weight.BOLD
       buffer.create_tag 'left'      foreground: '#991100' weight: Pango.Weight.BOLD
 
+      # tagFor :: str -> str
+      #
+      # Create a new tag to wrap a string, return its name.
+      #
+      # (The tag will make the text bold and pseudorandomly colored.)
+      #
+      tagFor = x ->
+        r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
+        m = 127 - max 127 (0.299 * r + 0.587 * g + 0.114 * b)
+        color = '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (+ round m) (r, g, b))
+
+        table = buffer.get_tag_table!
+        table.lookup ('n#' + x) or
+          buffer.create_tag ('n#' + x) foreground: color weight: Pango.Weight.BOLD
+        'n#' + x
+
       # Note that an empty line above some text looks better than one below.
-      message = (f x) -> (f (strftime '\n%H:%M:%S ')  'time', f (x !! 'mucnick') ('n#' + x !! 'mucnick'), f (' ' + x !! 'body') ('m#' if '' == x !! 'mucnick' else 'highlight' if nick in x !! 'body' else 'text'))
+      message = (f x) -> (f (strftime '\n%H:%M:%S ')  'time', f (x !! 'mucnick') (tagFor $ x !! 'mucnick'), f (' ' + x !! 'body') ('m#' if '' == x !! 'mucnick' else 'highlight' if nick in x !! 'body' else 'text'))
       joined  = (f x) -> (f (strftime '\n%H:%M:%S +') 'time', f (x !! 'muc' !! 'nick') 'joined')
       left    = (f x) -> (f (strftime '\n%H:%M:%S -') 'time', f (x !! 'muc' !! 'nick') 'left')
 
@@ -126,29 +142,8 @@ wnd.add $ paneWidget
       self.add_event_handler ('muc::{}::got_online'.format  room) $ log buffer joined
       self.add_event_handler ('muc::{}::got_offline'.format room) $ log buffer left
 
-      self.add_event_handler ('muc::{}::got_online'.format room) st ->
-        # Create a new set of tags for them.
-        #
-        # `n#{nick}` -- a tag for highlighting nicknames.
-        # `m#{nick}` -- a tag for `/me`-messages.
-        #
-        nick = st !! 'muc' !! 'nick'
-        color = choice $ list'
-          '#0066cc'
-          '#551199'
-          '#338800'
-          '#cc6600'
-          '#cc0000'
-          '#c4a000'
-          '#06989a'
-          '#334455'
-
-        buffer.create_tag ('n#' + nick) foreground: color weight: Pango.Weight.BOLD
-        buffer.create_tag ('m#' + nick) foreground: color style: Pango.Style.ITALIC
-
       # There is also a system channel without a nickname.
       buffer.create_tag 'm#' foreground: '#dd4400' style: Pango.Style.ITALIC
-      buffer.create_tag 'n#' foreground: '#dd4400' style: Pango.Style.ITALIC
 
     frame where
       # frame :: Frame
