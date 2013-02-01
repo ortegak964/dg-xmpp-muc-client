@@ -82,15 +82,14 @@ wnd.add $ paneWidget
         GObject.idle_add () -> (a.set_value a.get_upper!) if
           max 0 (a.get_upper! - a.get_page_size!) - a.get_value! < 10
 
-      # log :: (TextBuffer, str) -> dict str object -> str
+      # log :: (TextBuffer, [(TextTag, Stanza -> str)]) -> dict str object -> str
       #
       # Given a buffer and a format string, create a logging function.
       #
       log = (buffer fmt) -> delegate q ->
-        a = drop 1 $ split r'\{!(\w+)\}' $ strftime fmt
-        exhaust $ map (tag text) -> (
-          buffer.insert_with_tags_by_name buffer.get_end_iter! (text.format_map q) tag
-        ) a a
+        exhaust $ map (tag, f) -> (
+          buffer.insert_with_tags buffer.get_end_iter! (f q) tag
+        ) fmt
 
       # frame  :: Frame
       # output :: ScrolledWindow
@@ -114,16 +113,16 @@ wnd.add $ paneWidget
       buffer.connect 'changed'       $  _    -> rewind output.get_vadjustment!
       output.connect 'size-allocate' $ (_ _) -> rewind output.get_vadjustment!
 
-      buffer.create_tag 'time' foreground: '#666666'
-      buffer.create_tag 'nick' foreground: '#0066ff' weight: Pango.Weight.BOLD
-      buffer.create_tag 'join' foreground: '#119900' weight: Pango.Weight.BOLD
-      buffer.create_tag 'quit' foreground: '#991100' weight: Pango.Weight.BOLD
-      buffer.create_tag 'text' foreground: '#333333'
+      time = buffer.create_tag 'time' foreground: '#666666'
+      nick = buffer.create_tag 'nick' foreground: '#0066ff' weight: Pango.Weight.BOLD
+      join = buffer.create_tag 'join' foreground: '#119900' weight: Pango.Weight.BOLD
+      quit = buffer.create_tag 'quit' foreground: '#991100' weight: Pango.Weight.BOLD
+      text = buffer.create_tag 'text' foreground: '#333333'
 
       # Note that an empty line above some text looks better than one below.
-      message = '{!time}\n%H:%M:%S {!nick}{mucnick} {!text}{body}'
-      joined  = '{!time}\n%H:%M:%S +{!join}{muc[nick]}'
-      left    = '{!time}\n%H:%M:%S -{!quit}{muc[nick]}'
+      message = (time, _ -> strftime '\n%H:%M:%S '),  (nick, !! 'mucnick'), (text, x -> ' '+ x !! 'body')
+      joined  = (time, _ -> strftime '\n%H:%M:%S +'), (join, x -> x !! 'muc' !! 'nick')
+      left    = (time, _ -> strftime '\n%H:%M:%S -'), (quit, x -> x !! 'muc' !! 'nick')
 
       self.add_event_handler ('muc::{}::message'.format     room) $ log buffer message
       self.add_event_handler ('muc::{}::got_online'.format  room) $ log buffer joined
