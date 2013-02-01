@@ -87,7 +87,7 @@ wnd.add $ paneWidget
       #
       # Given a buffer and a formatter, create a logging function.
       #
-      log = (buffer fmt) -> bind (delegate fmt) (a b) -> (buffer.insert_with_tags_by_name buffer.get_end_iter! a b)
+      log = (buffer fmt) -> bind (delegate fmt) (a b) -> (buffer.insert_with_tags buffer.get_end_iter! a b)
 
       # frame  :: Frame
       # output :: ScrolledWindow
@@ -111,11 +111,12 @@ wnd.add $ paneWidget
       buffer.connect 'changed'       $  _    -> rewind output.get_vadjustment!
       output.connect 'size-allocate' $ (_ _) -> rewind output.get_vadjustment!
 
-      buffer.create_tag 'time'      foreground: '#777777'
-      buffer.create_tag 'text'      foreground: '#333333'
-      buffer.create_tag 'highlight' foreground: '#990011'
-      buffer.create_tag 'joined'    foreground: '#119900' weight: Pango.Weight.BOLD
-      buffer.create_tag 'left'      foreground: '#991100' weight: Pango.Weight.BOLD
+      time      = buffer.create_tag 'time'      foreground: '#777777'
+      text      = buffer.create_tag 'text'      foreground: '#333333'
+      highlight = buffer.create_tag 'highlight' foreground: '#990011'
+      joined_t  = buffer.create_tag 'joined'    foreground: '#119900' weight: Pango.Weight.BOLD
+      left_t    = buffer.create_tag 'left'      foreground: '#991100' weight: Pango.Weight.BOLD
+      system    = buffer.create_tag 'system'    foreground: '#dd4400' style: Pango.Style.ITALIC
 
       # tagFor :: str -> str
       #
@@ -131,19 +132,15 @@ wnd.add $ paneWidget
         table = buffer.get_tag_table!
         table.lookup ('n#' + x) or
           buffer.create_tag ('n#' + x) foreground: color weight: Pango.Weight.BOLD
-        'n#' + x
 
       # Note that an empty line above some text looks better than one below.
-      message = (f x) -> (f (strftime '\n%H:%M:%S ')  'time', f (x !! 'mucnick') (tagFor $ x !! 'mucnick'), f (' ' + x !! 'body') ('m#' if '' == x !! 'mucnick' else 'highlight' if nick in x !! 'body' else 'text'))
-      joined  = (f x) -> (f (strftime '\n%H:%M:%S +') 'time', f (x !! 'muc' !! 'nick') 'joined')
-      left    = (f x) -> (f (strftime '\n%H:%M:%S -') 'time', f (x !! 'muc' !! 'nick') 'left')
+      message = (f x) -> (f (strftime '\n%H:%M:%S ')  time, f (x !! 'mucnick') (tagFor $ x !! 'mucnick'), f (' ' + x !! 'body') (system if '' == x !! 'mucnick' else highlight if nick in x !! 'body' else text))
+      joined  = (f x) -> (f (strftime '\n%H:%M:%S +') time, f (x !! 'muc' !! 'nick') joined_t)
+      left    = (f x) -> (f (strftime '\n%H:%M:%S -') time, f (x !! 'muc' !! 'nick') left_t)
 
       self.add_event_handler ('muc::{}::message'.format     room) $ log buffer message
       self.add_event_handler ('muc::{}::got_online'.format  room) $ log buffer joined
       self.add_event_handler ('muc::{}::got_offline'.format room) $ log buffer left
-
-      # There is also a system channel without a nickname.
-      buffer.create_tag 'm#' foreground: '#dd4400' style: Pango.Style.ITALIC
 
     frame where
       # frame :: Frame
