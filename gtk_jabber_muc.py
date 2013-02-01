@@ -2,6 +2,7 @@
 
 import '/time/strftime'
 
+import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
 import '/gi/repository/Pango'
 import '/gi/repository/GObject'
@@ -33,7 +34,7 @@ self.add_event_handler 'session_start' _ ->
 delegate = f -> bind GObject.idle_add ((_ -> False) <- f)
 
 
-# frameWidget :: Widget -> (Frame, ScrolledWindow)
+# frameWidget :: (Widget, **) -> (Frame, ScrolledWindow)
 #
 # Wrap a widget in a frame supplied with scrollbars.
 #
@@ -46,7 +47,7 @@ frameWidget = (w **: k) ->
   frame, scroll
 
 
-# paneWidget :: (Widget, Widget) -> Paned
+# paneWidget :: (Widget, Widget, **) -> Paned
 #
 # Same thing with GtkPaned.
 #
@@ -85,10 +86,9 @@ wnd.add $ paneWidget
       #
       # Given a buffer and a list of format instructions, create a logging function.
       #
-      log = (buffer fmt) -> delegate q ->
-        exhaust $ map (tag, f) -> (
-          buffer.insert_with_tags buffer.get_end_iter! (f q) tag
-        ) fmt
+      log = (buffer fmt) -> delegate $ q -> exhaust $ map
+        (tag, f) -> buffer.insert_with_tags buffer.get_end_iter! (f q) tag
+        fmt
 
       # frame  :: Frame
       # output :: ScrolledWindow
