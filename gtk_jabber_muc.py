@@ -47,7 +47,7 @@ frameWidget = (w **: k) ->
   frame, scroll
 
 
-# paneWidgets :: (Widget, Widget) -> Paned
+# paneWidget :: (Widget, Widget) -> Paned
 #
 # Same thing with GtkPaned.
 #
@@ -66,8 +66,13 @@ paneWidget = (w1 w2 **: k) ->
 
 
 wnd = Gtk.Window!
-wnd.add $ paneWidget orientation: Gtk.Orientation.VERTICAL
-  paneWidget hexpand: True vexpand: True
+wnd.add $ paneWidget
+  orientation: Gtk.Orientation.VERTICAL
+
+  paneWidget
+    hexpand: True
+    vexpand: True
+
     frame where
       # rewind :: Adjustment -> IO ()
       #
@@ -129,10 +134,10 @@ wnd.add $ paneWidget orientation: Gtk.Orientation.VERTICAL
       #
       # Another nice frame, yay!
       #
-      frame, _ = frameWidget roster vexpand: True where
+      frame = fst $ frameWidget roster vexpand: True where
         # roster :: TreeView
         #
-        # The same thing as a widget.
+        # A list of all participants.
         #
         roster = Gtk.TreeView model where
           # findByColumn :: (TreeModel, int, a) -> iter [TreeIter]
@@ -167,23 +172,25 @@ wnd.add $ paneWidget orientation: Gtk.Orientation.VERTICAL
             # 3. ???????
             # 4. False. (Wait, no, `delegate` will return `False` anyway.)
 
-        roster.append_column $ Gtk.TreeViewColumn
-          'Participants'
+        roster.append_column $ Gtk.TreeViewColumn 'Participants'
           Gtk.CellRendererText!
           text:       0
           foreground: 1
 
       frame.set_size_request 100 100
 
-  entry where
+  fst $ frameWidget entry hexpand: True where
     # entry :: Entry
     #
     # An editable field for sending messages.
     #
-    entry = Gtk.Entry hexpand: True
-    entry.connect 'activate' w ->
-      self.send_message room w.get_text! mtype: 'groupchat'
-      w.set_text ''
+    entry = Gtk.TextView editable: True
+    entry.connect 'key-press-event' (w ev) ->
+      ev.keyval == 65293 and
+        b = w.get_buffer!
+        self.send_message room (b.get_text b.get_start_iter! b.get_end_iter! False) mtype: 'groupchat'
+        b.set_text ''
+        True
 
 wnd.connect 'delete-event' Gtk.main_quit
 wnd.connect 'delete-event' (_ _) -> self.disconnect!
