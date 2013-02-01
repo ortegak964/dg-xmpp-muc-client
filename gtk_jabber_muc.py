@@ -84,7 +84,7 @@ wnd.add $ paneWidget
 
       # log :: (TextBuffer, [(TextTag, Stanza -> str)]) -> dict str object -> str
       #
-      # Given a buffer and a format string, create a logging function.
+      # Given a buffer and a list of format instructions, create a logging function.
       #
       log = (buffer fmt) -> delegate q ->
         exhaust $ map (tag, f) -> (
