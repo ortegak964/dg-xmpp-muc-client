@@ -1,6 +1,7 @@
 # v2.0, now with a nice UI and 1725% more comments stating the obvious!
 
 import '/time/strftime'
+import '/random/choice'
 
 import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
@@ -60,8 +61,8 @@ paneWidget = (w1 w2 **: k) ->
     w.get_vexpand! if p.get_orientation! == Gtk.Orientation.VERTICAL else w.get_hexpand!
 
   paned = Gtk.Paned **: k
-  paned.pack1 w1 (getExpand w1 paned) (getExpand w1 paned)
-  paned.pack2 w2 (getExpand w2 paned) (getExpand w2 paned)
+  paned.pack1 w1 (getExpand w1 paned) False
+  paned.pack2 w2 (getExpand w2 paned) False
   paned
 
 
@@ -86,9 +87,7 @@ wnd.add $ paneWidget
       #
       # Given a buffer and a list of format instructions, create a logging function.
       #
-      log = (buffer fmt) -> delegate $ q -> exhaust $ map
-        (tag, f) -> buffer.insert_with_tags buffer.get_end_iter! (f q) tag
-        fmt
+      log = (buffer fmt) -> bind (delegate fmt) (a b) -> (buffer.insert_with_tags_by_name buffer.get_end_iter! a b)
 
       # frame  :: Frame
       # output :: ScrolledWindow
@@ -112,20 +111,48 @@ wnd.add $ paneWidget
       buffer.connect 'changed'       $  _    -> rewind output.get_vadjustment!
       output.connect 'size-allocate' $ (_ _) -> rewind output.get_vadjustment!
 
-      time = buffer.create_tag 'time' foreground: '#777777'
-      text = buffer.create_tag 'text' foreground: '#333333'
-      nick = buffer.create_tag 'nick' foreground: '#0066ff' weight: Pango.Weight.BOLD
-      join = buffer.create_tag 'join' foreground: '#119900' weight: Pango.Weight.BOLD
-      quit = buffer.create_tag 'quit' foreground: '#991100' weight: Pango.Weight.BOLD
+      buffer.create_tag 'time'      foreground: '#777777'
+      buffer.create_tag 'text'      foreground: '#333333'
+      buffer.create_tag 'highlight' foreground: '#990011'
+      buffer.create_tag 'joined'    foreground: '#119900' weight: Pango.Weight.BOLD
+      buffer.create_tag 'left'      foreground: '#991100' weight: Pango.Weight.BOLD
 
       # Note that an empty line above some text looks better than one below.
-      message = (time, _ -> strftime '\n%H:%M:%S '),  (nick, !! 'mucnick'), (text, x -> ' ' + x !! 'body')
-      joined  = (time, _ -> strftime '\n%H:%M:%S +'), (join, x -> x !! 'muc' !! 'nick')
-      left    = (time, _ -> strftime '\n%H:%M:%S -'), (quit, x -> x !! 'muc' !! 'nick')
+      message = (f x) -> (f (strftime '\n%H:%M:%S ')  'time', f (x !! 'mucnick') ('n#' + x !! 'mucnick'), f (' ' + x !! 'body') ('m#' if '' == x !! 'mucnick' else 'highlight' if nick in x !! 'body' else 'text'))
+      joined  = (f x) -> (f (strftime '\n%H:%M:%S +') 'time', f (x !! 'muc' !! 'nick') 'joined')
+      left    = (f x) -> (f (strftime '\n%H:%M:%S -') 'time', f (x !! 'muc' !! 'nick') 'left')
 
       self.add_event_handler ('muc::{}::message'.format     room) $ log buffer message
       self.add_event_handler ('muc::{}::got_online'.format  room) $ log buffer joined
       self.add_event_handler ('muc::{}::got_offline'.format room) $ log buffer left
+
+      self.add_event_handler ('muc::{}::got_online'.format room) st ->
+        # Create a new set of tags for them.
+        #
+        # `n#{nick}` -- a tag for highlighting nicknames.
+        # `m#{nick}` -- a tag for `/me`-messages.
+        #
+        nick = st !! 'muc' !! 'nick'
+        color = choice $ list'
+          '#0066cc'
+          '#551199'
+          '#338800'
+          '#cc6600'
+          '#cc0000'
+          '#c4a000'
+          '#06989a'
+          '#334455'
+
+        buffer.create_tag ('n#' + nick) foreground: color weight: Pango.Weight.BOLD
+        buffer.create_tag ('m#' + nick) foreground: color style: Pango.Style.ITALIC
+
+      self.add_event_handler ('muc::{}::got_offline'.format room) st ->
+        # ...and remove it to avoid leaking memory.
+        nick = st !! 'muc' !! 'nick'
+
+      # There is also a system channel without a nickname.
+      buffer.create_tag 'm#' foreground: '#dd4400' style: Pango.Style.ITALIC
+      buffer.create_tag 'n#' foreground: '#dd4400' style: Pango.Style.ITALIC
 
     frame where
       # frame :: Frame
