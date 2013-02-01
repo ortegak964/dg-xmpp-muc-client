@@ -1,6 +1,5 @@
 # v2.0, now with a nice UI and 1725% more comments stating the obvious!
 
-import '/re/split'
 import '/time/strftime'
 
 import '/gi/repository/Gtk'
@@ -113,14 +112,14 @@ wnd.add $ paneWidget
       buffer.connect 'changed'       $  _    -> rewind output.get_vadjustment!
       output.connect 'size-allocate' $ (_ _) -> rewind output.get_vadjustment!
 
-      time = buffer.create_tag 'time' foreground: '#666666'
+      time = buffer.create_tag 'time' foreground: '#777777'
+      text = buffer.create_tag 'text' foreground: '#333333'
       nick = buffer.create_tag 'nick' foreground: '#0066ff' weight: Pango.Weight.BOLD
       join = buffer.create_tag 'join' foreground: '#119900' weight: Pango.Weight.BOLD
       quit = buffer.create_tag 'quit' foreground: '#991100' weight: Pango.Weight.BOLD
-      text = buffer.create_tag 'text' foreground: '#333333'
 
       # Note that an empty line above some text looks better than one below.
-      message = (time, _ -> strftime '\n%H:%M:%S '),  (nick, !! 'mucnick'), (text, x -> ' '+ x !! 'body')
+      message = (time, _ -> strftime '\n%H:%M:%S '),  (nick, !! 'mucnick'), (text, x -> ' ' + x !! 'body')
       joined  = (time, _ -> strftime '\n%H:%M:%S +'), (join, x -> x !! 'muc' !! 'nick')
       left    = (time, _ -> strftime '\n%H:%M:%S -'), (quit, x -> x !! 'muc' !! 'nick')
 
@@ -162,12 +161,9 @@ wnd.add $ paneWidget
             # 1. Remove the old entry.
             exhaust $ map (model !!~) $ findByColumn model 0 nick
             # 2. Add the same entry.
+            #    (Easier than checking if there's already one.)
             t != 'unavailable' and
-              model.append $ list' nick $ switch
-                t == 'dnd'  = '#910'
-                t == 'away' = '#f60'
-                t == 'chat' = '#190'
-                True        = '#333'
+              model.append (nick, (dict dnd: '#910' away: '#f60' chat: '#190').get t '#333')
             # 3. ???????
             # 4. False. (Wait, no, `delegate` will return `False` anyway.)
 
@@ -185,9 +181,12 @@ wnd.add $ paneWidget
     #
     entry = Gtk.TextView editable: True
     entry.connect 'key-press-event' (w ev) ->
-      ev.keyval == 65293 and
+      # Use `Shift+Enter` or `Numpad Enter` to insert a newline.
+      # `Enter` without any modifier sends the message.
+      ev.keyval == Gdk.KEY_Return and not (ev.state & Gdk.ModifierType.MODIFIER_MASK) and
         b = w.get_buffer!
-        self.send_message room (b.get_text b.get_start_iter! b.get_end_iter! False) mtype: 'groupchat'
+        t = b.get_text b.get_start_iter! b.get_end_iter! False
+        self.send_message room t mtype: 'groupchat'
         b.set_text ''
         True
 
