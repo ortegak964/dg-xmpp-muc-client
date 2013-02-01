@@ -182,8 +182,7 @@ wnd.add $ paneWidget
     entry = Gtk.TextView editable: True
     entry.connect 'key-press-event' (w ev) ->
       # Use `Shift+Enter` or `Numpad Enter` to insert a newline.
-      # `Enter` without any modifier sends the message.
-      ev.keyval == Gdk.KEY_Return and not (ev.state & Gdk.ModifierType.MODIFIER_MASK) and
+      ev.keyval == Gdk.KEY_Return and not (ev.state & Gdk.ModifierType.SHIFT_MASK) and
         b = w.get_buffer!
         t = b.get_text b.get_start_iter! b.get_end_iter! False
         self.send_message room t mtype: 'groupchat'
