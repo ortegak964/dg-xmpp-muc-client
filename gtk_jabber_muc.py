@@ -146,10 +146,6 @@ wnd.add $ paneWidget
         buffer.create_tag ('n#' + nick) foreground: color weight: Pango.Weight.BOLD
         buffer.create_tag ('m#' + nick) foreground: color style: Pango.Style.ITALIC
 
-      self.add_event_handler ('muc::{}::got_offline'.format room) st ->
-        # ...and remove it to avoid leaking memory.
-        nick = st !! 'muc' !! 'nick'
-
       # There is also a system channel without a nickname.
       buffer.create_tag 'm#' foreground: '#dd4400' style: Pango.Style.ITALIC
       buffer.create_tag 'n#' foreground: '#dd4400' style: Pango.Style.ITALIC
