@@ -118,25 +118,38 @@ wnd.add $ paneWidget
       left_t    = buffer.create_tag 'left'      foreground: '#991100' weight: Pango.Weight.BOLD
       system    = buffer.create_tag 'system'    foreground: '#dd4400' style: Pango.Style.ITALIC
 
+      # colorHash :: str -> str
+      #
+      # Create a pseudorandom color given a seed string.
+      #
+      colorHash = x ->
+        r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
+        m = 127 - max 127 (0.299 * r + 0.587 * g + 0.114 * b)
+        '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (+ round m) (r, g, b))
+
+
       # tagFor :: str -> str
       #
       # Create a new tag to wrap a string, return its name.
       #
       # (The tag will make the text bold and pseudorandomly colored.)
       #
-      tagFor = x ->
-        r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
-        m = 127 - max 127 (0.299 * r + 0.587 * g + 0.114 * b)
-        color = '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (+ round m) (r, g, b))
-
+      tagFor = (buffer prefix x **: k) ->
         table = buffer.get_tag_table!
-        table.lookup ('n#' + x) or
-          buffer.create_tag ('n#' + x) foreground: color weight: Pango.Weight.BOLD
+        table.lookup (prefix + '#' + x) or
+          buffer.create_tag (prefix + '#' + x) foreground: (colorHash x) **: k
 
       # Note that an empty line above some text looks better than one below.
-      message = (f x) -> (f (strftime '\n%H:%M:%S ')  time, f (x !! 'mucnick') (tagFor $ x !! 'mucnick'), f (' ' + x !! 'body') (system if '' == x !! 'mucnick' else highlight if nick in x !! 'body' else text))
       joined  = (f x) -> (f (strftime '\n%H:%M:%S +') time, f (x !! 'muc' !! 'nick') joined_t)
       left    = (f x) -> (f (strftime '\n%H:%M:%S -') time, f (x !! 'muc' !! 'nick') left_t)
+      message = (f x) ->
+        f (strftime '\n%H:%M:%S ' time
+        switch
+          x !! 'mucnick' == '' = f (x !! 'body') system
+          (x !! 'body').startswith '/me ' = f (x !! 'mucnick' + x !! 'body' !! slice 3 None) $ tagFor buffer 'm' $ x !! 'mucnick'
+          True =
+            f (x !! 'mucnick' + ' ') $ tagFor buffer 'n' $ x !! 'mucnick'
+            f (x !! 'body') (highlight if nick in x !! 'body' else text)
 
       self.add_event_handler ('muc::{}::message'.format     room) $ log buffer message
       self.add_event_handler ('muc::{}::got_online'.format  room) $ log buffer joined
