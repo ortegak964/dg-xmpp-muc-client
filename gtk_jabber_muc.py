@@ -75,13 +75,23 @@ wnd.add $ paneWidget
     vexpand: True
 
     frame where
-      # rewind :: Adjustment -> IO ()
+      # autoRewind :: ScrolledWindow -> IO ()
       #
-      # Scroll to the bottom.
+      # Automatically scroll a view to the bottom.
       #
-      rewind = a ->
-        GObject.idle_add () -> (a.set_value a.get_upper!) if
-          max 0 (a.get_upper! - a.get_page_size!) - a.get_value! < 10
+      autoRewind = w ->
+        # atBottom :: Adjustment -> bool
+        #
+        # Whether a view is already somewhere near the bottom.
+        #
+        atBottom = a -> a.get_upper! - a.get_page_size! - a.get_value! < 5
+
+        a = w.get_vadjustment!
+        x = atBottom a
+        
+        a.connect 'value-changed' a -> (x = atBottom a)
+        a.connect 'changed' a ->
+          GObject.idle_add () -> (a.set_value a.get_upper!) if x
 
       # log :: (TextBuffer, (Stanza, (str, TextTag) -> ()) -> IO ()) -> Stanza -> IO ()
       #
@@ -107,10 +117,9 @@ wnd.add $ paneWidget
           cursor_visible: False
           wrap_mode:      Gtk.WrapMode.WORD
 
-      buffer = view.get_buffer!
-      buffer.connect 'changed'       $  _    -> rewind output.get_vadjustment!
-      output.connect 'size-allocate' $ (_ _) -> rewind output.get_vadjustment!
+      autoRewind output
 
+      buffer = view.get_buffer!
       time      = buffer.create_tag 'time'      foreground: '#777777'
       text      = buffer.create_tag 'text'      foreground: '#333333'
       highlight = buffer.create_tag 'highlight' foreground: '#990011'
@@ -143,7 +152,7 @@ wnd.add $ paneWidget
       joined  = (f x) -> (f (strftime '\n%H:%M:%S +') time, f (x !! 'muc' !! 'nick') joined_t)
       left    = (f x) -> (f (strftime '\n%H:%M:%S -') time, f (x !! 'muc' !! 'nick') left_t)
       message = (f x) ->
-        f (strftime '\n%H:%M:%S ' time
+        f (strftime '\n%H:%M:%S ') time
         switch
           x !! 'mucnick' == '' = f (x !! 'body') system
           (x !! 'body').startswith '/me ' = f (x !! 'mucnick' + x !! 'body' !! slice 3 None) $ tagFor buffer 'm' $ x !! 'mucnick'
