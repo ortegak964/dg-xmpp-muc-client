@@ -71,10 +71,10 @@ Gtk.Container.with = classmethod (cls other *: a **: k) ->
 #
 # Create a frame with a couple of predefined properties and some scrollbars.
 #
-Gtk.Frame.scrollable = classmethod (cls other **: k) ->
+Gtk.Frame.scrollable = classmethod (cls other auto_rewind: False **: k) ->
   scroll = Gtk.ScrolledWindow.with other
-  self   = cls.with scroll margin: 2 shadow_type: Gtk.ShadowType.ETCHED_IN **: k
-  self, scroll
+  scroll.props.vadjustment.auto_rewind if auto_rewind
+  cls.with scroll margin: 2 shadow_type: Gtk.ShadowType.ETCHED_IN **: k
 
 
 # will_stretch :: Widget -> bool
@@ -168,7 +168,7 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
     hexpand: True
     vexpand: True
 
-    frame where
+    Gtk.Frame.scrollable view hexpand: True vexpand: True auto_rewind: True where
       # colorHash :: str -> str
       #
       # Create a pseudorandom color given a seed string.
@@ -178,25 +178,14 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
         m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
         '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (+ round m) (r, g, b))
 
-      # frame  :: Frame
-      # output :: ScrolledWindow
+      # view :: TextView
       #
-      # A simple decorative frame.
+      # Where messages go.
       #
-      frame, output = Gtk.Frame.scrollable
-        hexpand: True
-        vexpand: True
-
-        # view :: TextView
-        #
-        # Where messages go.
-        #
-        view = Gtk.TextView
-          editable:       False
-          cursor_visible: False
-          wrap_mode:      Gtk.WrapMode.WORD
-
-      output.props.vadjustment.auto_rewind
+      view = Gtk.TextView
+        editable:       False
+        cursor_visible: False
+        wrap_mode:      Gtk.WrapMode.WORD
 
       buffer = view.props.buffer
       time      = buffer.create_tag 'time'      foreground: '#777777'
@@ -207,11 +196,11 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
       system    = buffer.create_tag 'system'    foreground: '#dd4400' style: Pango.Style.ITALIC
 
       # Note that an empty line above some text looks better than one below.
-      joined  = x ->
+      joined = x ->
         buffer.append_with_tags (strftime '\n%H:%M:%S +') time
         buffer.append_with_tags x.nick joined_t
 
-      left    = x ->
+      left = x ->
         buffer.append_with_tags (strftime '\n%H:%M:%S −') time
         buffer.append_with_tags x.nick left_t
 
@@ -236,42 +225,35 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
       self.add_event_handler ('muc::{}::got_online'.format  room) $ delegate joined
       self.add_event_handler ('muc::{}::got_offline'.format room) $ delegate left
 
-    frame where
-      # frame :: Frame
+    Gtk.Frame.scrollable roster vexpand: True where
+      # roster :: TreeView
       #
-      # Another nice frame, yay!
+      # A list of all participants.
       #
-      frame = fst $ Gtk.Frame.scrollable roster vexpand: True where
-        # roster :: TreeView
+      roster = Gtk.TreeView model where
+        # model :: ListStore
         #
-        # A list of all participants.
+        # The same thing as raw data.
         #
-        roster = Gtk.TreeView model where
-          # model :: ListStore
-          #
-          # The same thing as raw data.
-          #
-          model = Gtk.ListStore str str
-          model.set_sort_column_id 0 Gtk.SortType.ASCENDING
+        model = Gtk.ListStore str str
+        model.set_sort_column_id 0 Gtk.SortType.ASCENDING
 
-          self.add_event_handler ('muc::{}::presence'.format room) $ delegate p ->
-            # 1. Remove the old entry.
-            exhaust $ map (model !!~) $ model.find p.nick 0
-            # 2. Add the same entry.
-            #    (Easier than checking if there's already one.)
-            p.type != 'unavailable' and
-              model.append (p.nick, (dict dnd: '#910' away: '#f60' chat: '#190').get p.type '#333')
-            # 3. ???????
-            # 4. False. (Wait, no, `delegate` will return `False` anyway.)
+        self.add_event_handler ('muc::{}::presence'.format room) $ delegate p ->
+          # 1. Remove the old entry.
+          exhaust $ map (model !!~) $ model.find p.nick 0
+          # 2. Add the same entry.
+          #    (Easier than checking if there's already one.)
+          p.type != 'unavailable' and
+            model.append (p.nick, (dict dnd: '#910' away: '#f60' chat: '#190').get p.type '#333')
+          # 3. ???????
+          # 4. False. (Wait, no, `delegate` will return `False` anyway.)
 
-        roster.append_column $ Gtk.TreeViewColumn 'Participants'
-          Gtk.CellRendererText!
-          text:       0
-          foreground: 1
+      roster.append_column $ Gtk.TreeViewColumn 'Participants'
+        Gtk.CellRendererText!
+        text:       0
+        foreground: 1
 
-      frame.set_size_request 100 100
-
-  fst $ Gtk.Frame.scrollable entry hexpand: True where
+  Gtk.Frame.scrollable entry hexpand: True where
     # entry :: Entry
     #
     # An editable field for sending messages.
