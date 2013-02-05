@@ -106,7 +106,7 @@ Gtk.TextBuffer.append_with_tags = (self text *: tags) ->
 
 # get_tag :: (str, **) -> TextTag
 #
-# Retrieve a tag by name, create a new one if none found.
+# Find a tag by name, create a new one if none found.
 #
 Gtk.TextBuffer.get_tag = (self name **: k) ->
   table = self.props.tag_table
