@@ -1,3 +1,19 @@
+import '/re'
+import '/webbrowser'
+import '/hashlib/md5'
+import '/time/strftime'
+import '/itertools/cycle'
+
+import '/gi/repository/Gdk'
+import '/gi/repository/Gtk'
+import '/gi/repository/Pango'
+import '/gi/repository/GObject'
+
+import '/sleekxmpp/Message'
+import '/sleekxmpp/Presence'
+import '/sleekxmpp/ClientXMPP'
+
+
 ## Config.
 
 jid      = 'jid@jabber.org'
@@ -8,28 +24,21 @@ nick     = 'nick'
 
 ## Misc stuff.
 
-import '/re'
-import '/webbrowser'
-import '/itertools/cycle'
-
-
-# linkify :: str -> [(str, bool)]
+# linkify :: str -> [str]
 #
-# Split some text into a sequence of pairs `A`, where
-#   fst A == part of that text
-#   snd A == whether that part is a hyperlink
+# Split some text into a sequence of strings, where evenly-numbered ones
+# are hyperlinks.
 #
-link_re = re.compile $ r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"' + "',\.?%]|%\d{2}|\([^\s(<>)'" + r'"]+\))+)'
-linkify = x -> zip (link_re.split x) $ cycle (False, True)
-
-import '/hashlib/md5'
-import '/time/strftime'
+linkify = (re.compile
+  r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"' +
+    "',\.?%]|%\d{2}|\([^\s(<>)'" + r'"]+\))+)'
+).split
 
 
 # colorify :: str -> str
 #
 # Generate a preudorandom color given a seed string.
-# Luminance of the resulting color is capped at 0.5.
+# Luminance of that color is capped at 0.5.
 #
 colorify = x ->
   r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
@@ -38,12 +47,6 @@ colorify = x ->
 
 
 ## Gtk tools and extensions.
-
-import '/gi/repository/Gdk'
-import '/gi/repository/Gtk'
-import '/gi/repository/Pango'
-import '/gi/repository/GObject'
-
 
 # at_bottom :: bool
 #
@@ -120,9 +123,9 @@ Gtk.TextBuffer.append_with_tags = (self text *: tags) ->
 #
 # `append_with_tags` that automatically creates clickable links.
 #
-Gtk.TextBuffer.linkify_with_tags = (self text *: tags) -> exhaust $ map
-  (part, islink) -> switch
-    islink =
+Gtk.TextBuffer.linkify_with_tags = (self text *: tags) -> exhaust $ map (f x) -> (f x)
+  cycle (not_link, link) where
+    link = part ->
       tag = self.create_tag None foreground: '#0011dd' underline: Pango.Underline.SINGLE
       tag.connect 'event' (this view ev it) ->
         webbrowser.open part if ev.type == Gdk.EventType.BUTTON_RELEASE and
@@ -131,7 +134,7 @@ Gtk.TextBuffer.linkify_with_tags = (self text *: tags) -> exhaust $ map
         False
 
       self.append_with_tags part tag *: tags
-    True = self.append_with_tags part *: tags
+    not_link = part -> self.append_with_tags part *: tags
   linkify text
   
 
@@ -162,11 +165,6 @@ delegate = f -> bind GObject.idle_add ((_ -> False) <- f)
 
 
 ## SleekXMPP extensions.
-
-import '/sleekxmpp/Message'
-import '/sleekxmpp/Presence'
-import '/sleekxmpp/ClientXMPP'
-
 
 Message.body = property $ !! 'body'
 Message.nick = property $ !! 'mucnick'
