@@ -12,6 +12,10 @@
 #   3.0:
 #
 #     * Monkey-patch EVERYTHING!
+#
+#   4.0:
+#
+#     * Alpha version of HTML output
 # 
 
 import '/re/sub'
