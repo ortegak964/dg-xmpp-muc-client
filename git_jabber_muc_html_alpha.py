@@ -12,10 +12,6 @@
 #   3.0:
 #
 #     * Monkey-patch EVERYTHING!
-#
-#   4.0:
-#
-#     * Alpha version of HTML output
 # 
 
 import '/re/sub'
@@ -141,6 +137,7 @@ Message.nick = property $ !! 'mucnick'
 
 Presence.type = property $ !! 'type'
 Presence.nick = property $ !! 'nick' <- !! 'muc'
+Presence.body = property self -> ''
 
 ClientXMPP.muc = property $ !! 'xep_0045' <- `getattr` 'plugin'
 
@@ -185,28 +182,21 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
       dom  = view.get_dom_document!
       body = dom.get_first_child!.get_last_child!
 
-      message         = '<span style="color: #777">%H:%M:%S</span> <span style="color: {0}; font-weight: bold">{1.nick}</span> <span style="color: #333">{1.body}</span>'
-      message_thisref = '<span style="color: #777">%H:%M:%S</span> <span style="color: {0}; font-weight: bold">{1.nick}</span> <span style="color: #901">{1.body}</span>'
-      message_selfref = '<span style="color: #777">%H:%M:%S</span> <span style="color: {0}; font-style: italic">{1.nick} {1.body}</span>'
-      message_system  = '<span style="color: #777">%H:%M:%S</span> <span style="color: #d40; font-style: italic">{1.body}</span>'
-      joined          = '<span style="color: #777">%H:%M:%S +</span><span style="color: #190; font-weight: bold">{1.nick}</span>'
-      left            = '<span style="color: #777">%H:%M:%S −</span><span style="color: #910; font-weight: bold">{1.nick}</span>'
+      message         = '<span style="color: #777">%H:%M:%S</span> <span style="color: {0}; font-weight: bold">{nick}</span> <span style="color: #333">{body}</span>'
+      message_thisref = '<span style="color: #777">%H:%M:%S</span> <span style="color: {0}; font-weight: bold">{nick}</span> <span style="color: #901">{body}</span>'
+      message_selfref = '<span style="color: #777">%H:%M:%S</span> <span style="color: {0}; font-style: italic">{nick} {body}</span>'
+      message_system  = '<span style="color: #777">%H:%M:%S</span> <span style="color: #d40; font-style: italic">{body}</span>'
+      joined          = '<span style="color: #777">%H:%M:%S +</span><span style="color: #190; font-weight: bold">{nick}</span>'
+      left            = '<span style="color: #777">%H:%M:%S −</span><span style="color: #910; font-weight: bold">{nick}</span>'
 
       format = (t x) ->
         e = dom.create_element 'div'
-        e.set_inner_html $ (strftime t).format (colorHash x.nick) x
+        e.set_inner_html $ (strftime t).format (colorHash x.nick) body: (linkify x.body) nick: (escape x.nick)
         body.append_child e
 
-      left_f    = delegate $ x ->
-        x !! 'muc' !! 'nick' = escape x.nick
-        format left   x
-      joined_f  = delegate $ x ->
-        x !! 'muc' !! 'nick' = escape x.nick
-        format joined x
-      message_f = delegate $ x ->
-       x !! 'body'    = linkify x.body
-       x !! 'mucnick' = escape x.nick
-       switch
+      left_f    = delegate $ x -> format left   x
+      joined_f  = delegate $ x -> format joined x
+      message_f = delegate $ x -> switch
         x.nick == ''             = format message_system  x
         x.body.startswith '/me ' = format message_selfref x where x !! 'body' = x.body !! slice 4 None
         nick in x.body           = format message_thisref x
