@@ -1,28 +1,40 @@
-# Changelog:
-#
-#   1.0:
-#
-#     * Initial release as a 57 SLOC jabber bot
-#
-#   2.0:
-#
-#     * Nice UI
-#     * Lots of comments stating the obvious
-#
-#   3.0:
-#
-#     * Monkey-patch EVERYTHING!
-# 
-
-import '/time/strftime'
-import '/hashlib/md5'
-
 ## Config.
 
 jid      = 'jid@jabber.org'
 password = 'password'
 room     = 'room@conference.jabber.org'
 nick     = 'nick'
+
+
+## Misc stuff.
+
+import '/re'
+import '/webbrowser'
+import '/itertools/cycle'
+
+
+# linkify :: str -> [(str, bool)]
+#
+# Split some text into a sequence of pairs `A`, where
+#   fst A == part of that text
+#   snd A == whether that part is a hyperlink
+#
+link_re = re.compile $ r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"' + "',\.?%]|%\d{2}|\([^\s(<>)'" + r'"]+\))+)'
+linkify = x -> zip (link_re.split x) $ cycle (False, True)
+
+import '/hashlib/md5'
+import '/time/strftime'
+
+
+# colorify :: str -> str
+#
+# Generate a preudorandom color given a seed string.
+# Luminance of the resulting color is capped at 0.5.
+#
+colorify = x ->
+  r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
+  m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
+  '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (+ round m) (r, g, b))
 
 
 ## Gtk tools and extensions.
@@ -104,6 +116,25 @@ Gtk.TextBuffer.append_with_tags = (self text *: tags) ->
   self.insert_with_tags self.get_end_iter! text *: tags
 
 
+# linkify_with_tags :: (str, *) -> IO ()
+#
+# `append_with_tags` that automatically creates clickable links.
+#
+Gtk.TextBuffer.linkify_with_tags = (self text *: tags) -> exhaust $ map
+  (part, islink) -> switch
+    islink =
+      tag = self.create_tag None foreground: '#0011dd' underline: Pango.Underline.SINGLE
+      tag.connect 'event' (this view ev it) ->
+        webbrowser.open part if ev.type == Gdk.EventType.BUTTON_RELEASE and
+                            not self.get_has_selection!
+        # We don't want the TextView to think there's a selection.
+        False
+
+      self.append_with_tags part tag *: tags
+    True = self.append_with_tags part *: tags
+  linkify text
+  
+
 # get_tag :: (str, **) -> TextTag
 #
 # Find a tag by name, create a new one if none found.
@@ -169,15 +200,6 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
     vexpand: True
 
     Gtk.Frame.scrollable view hexpand: True vexpand: True auto_rewind: True where
-      # colorHash :: str -> str
-      #
-      # Create a pseudorandom color given a seed string.
-      #
-      colorHash = x ->
-        r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
-        m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
-        '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (+ round m) (r, g, b))
-
       # view :: TextView
       #
       # Where messages go.
@@ -188,14 +210,13 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
         wrap_mode:      Gtk.WrapMode.WORD
 
       buffer = view.props.buffer
-      time      = buffer.create_tag 'time'      foreground: '#777777'
-      text      = buffer.create_tag 'text'      foreground: '#333333'
-      highlight = buffer.create_tag 'highlight' foreground: '#990011'
-      joined_t  = buffer.create_tag 'joined'    foreground: '#119900' weight: Pango.Weight.BOLD
-      left_t    = buffer.create_tag 'left'      foreground: '#991100' weight: Pango.Weight.BOLD
-      system    = buffer.create_tag 'system'    foreground: '#dd4400' style: Pango.Style.ITALIC
+      time      = buffer.create_tag None foreground: '#777777'
+      text      = buffer.create_tag None foreground: '#333333'
+      highlight = buffer.create_tag None foreground: '#990011'
+      joined_t  = buffer.create_tag None foreground: '#119900' weight: Pango.Weight.BOLD
+      left_t    = buffer.create_tag None foreground: '#991100' weight: Pango.Weight.BOLD
+      system    = buffer.create_tag None foreground: '#dd4400' style: Pango.Style.ITALIC
 
-      # Note that an empty line above some text looks better than one below.
       joined = x ->
         buffer.append_with_tags (strftime '\n%H:%M:%S +') time
         buffer.append_with_tags x.nick joined_t
@@ -205,8 +226,8 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
         buffer.append_with_tags x.nick left_t
 
       message = x ->
-        ntag = buffer.get_tag ('n#' + x.nick) foreground: (colorHash x.nick) weight: Pango.Weight.BOLD
-        mtag = buffer.get_tag ('n#' + x.nick) foreground: (colorHash x.nick) style: Pango.Style.ITALIC
+        ntag = buffer.get_tag ('n#' + x.nick) foreground: (colorify x.nick) weight: Pango.Weight.BOLD
+        mtag = buffer.get_tag ('n#' + x.nick) foreground: (colorify x.nick) style: Pango.Style.ITALIC
 
         sysmsg  = x.nick == ''
         selfref = x.body.startswith '/me '
@@ -215,11 +236,14 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
         buffer.append_with_tags (strftime '\n%H:%M:%S ') time
 
         switch
-          sysmsg  = buffer.append_with_tags x.body system
-          selfref = buffer.append_with_tags (x.nick + x.body !! slice 3 None) mtag
+          sysmsg =
+            buffer.linkify_with_tags x.body system
+          selfref =
+            buffer.append_with_tags (x.nick + ' ') mtag
+            buffer.linkify_with_tags (x.body !! slice 4 None) mtag
           True =
             buffer.append_with_tags (x.nick + ' ') ntag
-            buffer.append_with_tags x.body (highlight if thisref else text)
+            buffer.linkify_with_tags x.body (highlight if thisref else text)
 
       self.add_event_handler ('muc::{}::message'.format     room) $ delegate message
       self.add_event_handler ('muc::{}::got_online'.format  room) $ delegate joined
