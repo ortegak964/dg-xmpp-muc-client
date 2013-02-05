@@ -219,14 +219,14 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
         ntag = buffer.get_tag ('n#' + x.nick) foreground: (colorHash x.nick) weight: Pango.Weight.BOLD
         mtag = buffer.get_tag ('n#' + x.nick) foreground: (colorHash x.nick) style: Pango.Style.ITALIC
 
-        system  = x.nick == ''
+        sysmsg  = x.nick == ''
         selfref = x.body.startswith '/me '
         thisref = nick in x.body
 
         buffer.append_with_tags (strftime '\n%H:%M:%S ') time
 
         switch
-          system  = buffer.append_with_tags x.body system
+          sysmsg  = buffer.append_with_tags x.body system
           selfref = buffer.append_with_tags (x.nick + x.body !! slice 3 None) mtag
           True =
             buffer.append_with_tags (x.nick + ' ') ntag
