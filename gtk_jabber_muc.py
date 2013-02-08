@@ -29,10 +29,8 @@ nick     = 'nick'
 # Split some text into a sequence of strings, where evenly-numbered ones
 # are hyperlinks.
 #
-linkify = (re.compile
-  r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"' +
-    "',\.?%]|%\d{2}|\([^\s(<>)'" + r'"]+\))+)'
-).split
+linkify = `getattr` 'split' $ re.compile
+  r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%\d{2}|\([^\s(<>)\'"]+\))+)'
 
 
 # colorify :: str -> str
@@ -225,7 +223,7 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
 
       message = x ->
         ntag = buffer.get_tag ('n#' + x.nick) foreground: (colorify x.nick) weight: Pango.Weight.BOLD
-        mtag = buffer.get_tag ('n#' + x.nick) foreground: (colorify x.nick) style: Pango.Style.ITALIC
+        mtag = buffer.get_tag ('m#' + x.nick) foreground: (colorify x.nick) style: Pango.Style.ITALIC
 
         sysmsg  = x.nick == ''
         selfref = x.body.startswith '/me '
