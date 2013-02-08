@@ -132,7 +132,7 @@ Gtk.TextBuffer.linkify = (self x *: tags) -> exhaust $ map call
       tag.connect 'event' (_ _ ev _) ->
         # That should be better than `webbrowser.open`, I think.
         # Is this function equivalent to `xdg-open`?
-        Gtk.show_uri self.get_screen! part 0 if
+        Gtk.show_uri Gdk.Screen.get_default! part 0 if
           ev.type == Gdk.EventType.BUTTON_RELEASE and not self.get_has_selection!
         # We don't want the TextView to think there's a selection.
         False
