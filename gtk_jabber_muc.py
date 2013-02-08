@@ -99,6 +99,17 @@ Gtk.TextBuffer.append = (self item *: tags) -> switch
   True = raise $ TypeError $ '{} is not insertable'.format item
 
 
+# autocomplete :: iter [str] -> IO ()
+#
+# Make the buffer contain any of the strings in the list that start
+# with the buffer's current contents.
+#
+Gtk.TextBuffer.autocomplete = (self items) ->
+  st = self.props.text
+  ns = list $ filter x -> (x.startswith st if st) items
+  self.append $ ''.join $ drop (len st) $ head ns if ns
+
+
 # emotify :: (str, *) -> IO ()
 #
 # `append` that replaces text emoticons with `GdkPixbuf`s.
@@ -305,6 +316,16 @@ make_pane = (room nick) -> Gtk.Paned.with
       # A list of all participants.
       #
       roster = Gtk.TreeView model where
+        # status :: str -> str
+        #
+        # Get an icon name given a presence type.
+        #
+        status = x -> (dict
+          dnd:  'empathy-busy'
+          away: 'empathy-away'
+          xa:   'empathy-extended-away'
+        ).get x 'empathy-available'
+
         # model :: ListStore
         #
         # The same thing as raw data.
@@ -317,43 +338,35 @@ make_pane = (room nick) -> Gtk.Paned.with
           exhaust $ map (model !!~) $ model.find p.nick 0
           # 2. Add the same entry.
           #    (Easier than checking if there's already one.)
-          p.type != 'unavailable' and
-            model.append (p.nick, (dict dnd: '#910' away: '#f60' chat: '#190').get p.type '#333')
+          model.append (p.nick, status p.type) if p.type != 'unavailable'
           # 3. ???????
           # 4. False. (Wait, no, `delegate` will return `False` anyway.)
 
-      roster.append_column $ Gtk.TreeViewColumn 'Participants'
-        Gtk.CellRendererText!
-        text:       0
-        foreground: 1
+      roster.set_headers_visible False
+      roster.append_column $ Gtk.TreeViewColumn '' Gtk.CellRendererPixbuf! icon_name: 1
+      roster.append_column $ Gtk.TreeViewColumn '' Gtk.CellRendererText!   text: 0
 
   Gtk.Frame.scrollable entry hexpand: True where
+    # send :: TextBuffer -> bool
+    #
+    # Send a message to the active room, return True.
+    #
+    send = b -> b.set_text '' where self.send_message room b.props.text mtype: 'groupchat'
+
     # entry :: Entry
     #
     # An editable field for sending messages.
     #
-    entry = Gtk.TextView
-      editable:  True
-      wrap_mode: Gtk.WrapMode.WORD
-
+    entry = Gtk.TextView editable: True wrap_mode: Gtk.WrapMode.WORD
     entry.connect 'key-press-event' $ (w ev) -> switch
-      # Use `Shift+key` to override any of the following actions.
+      # `Return` send s the message.
+      # `Tab` autocompletes a nickname at the start of the message.
+      # Using any of these with `Shift` reverts them to their original action.
       ev.state & Gdk.ModifierType.SHIFT_MASK = False
+      ev.keyval == Gdk.KEY_Return = True where send w.props.buffer
+      ev.keyval == Gdk.KEY_Tab    = True where w.props.buffer.autocomplete
+        map (+ ', ') $ self.muc.rooms !! room
 
-      ev.keyval == Gdk.KEY_Return =
-        # `Enter` sends a message.
-        self.send_message room w.props.buffer.props.text mtype: 'groupchat'
-        w.props.buffer.props.text = ''
-        True
-
-      ev.keyval == Gdk.KEY_Tab =
-        # `Tab` autocompletes a nickname.
-        st = w.props.buffer.props.text
-        ns = list $ filter x -> (x.startswith st if st) $ self.muc.rooms !! room
-        ns and
-          w.props.buffer.append $ ''.join $ drop (len st) $ head ns
-          w.props.buffer.append ', '
-        True
 
 wnd = Gtk.Window.with tabs where
   tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
