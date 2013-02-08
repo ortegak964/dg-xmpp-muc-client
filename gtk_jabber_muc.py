@@ -110,31 +110,26 @@ Gtk.TextBuffer.autocomplete = (self items) ->
   self.append $ ''.join $ drop (len st) $ head ns if ns
 
 
-# emotify :: (str, *) -> IO ()
+# reapply :: (str, [(str, str -> IO ())]) -> IO ()
 #
-# `append` that replaces text emoticons with `GdkPixbuf`s.
+# Split a text by some regex, apply a function to even-numbered parts,
+# repeat with the next regex for all other ones.
 #
-Gtk.TextBuffer.emotify = (self x *: tags) -> exhaust $ map call
-  cycle $ list'
-    p -> self.append p *: tags
-    p ->
-      theme = Gtk.IconTheme.get_default!
-      icon  = self.emotes !! p
-
-      self.append *: tags
-        theme.load_icon icon 16 0 if theme.has_icon icon else p
-
-  re.split ('(' + '|'.join (map re.escape self.emotes) + ')') x
+# (I know that explanation sucks. Just look at the `linkify` function below.)
+#
+reapply = (x ((rx, f), *rest)) -> switch
+  rest = exhaust $ map call (cycle (`reapply` rest, f)) (re.split rx x)
+  True = f x
 
 
 # linkify :: (str, *) -> IO ()
 #
-# `emotify` that automatically creates clickable links.
+# `append` that automatically creates clickable links and inserts emoticons.
 #
-Gtk.TextBuffer.linkify = (self x *: tags) -> exhaust $ map call
-  cycle $ list'
-    part -> self.emotify part     *: tags
-    part -> self.append  part tag *: tags where
+Gtk.TextBuffer.linkify = (self x *: tags) -> reapply x $ list'
+  # If some part looks like a link, we wrap it in a tag.
+  r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%\d{2}|\([^\s(<>)\'"]+\))+)',
+    p -> self.append  p tag *: tags where
       # FIXME should use system colors.
       # FIXME should change mouse pointer appearance.
       # FIXME should add some context menu items, such as "Copy Location."
@@ -142,11 +137,20 @@ Gtk.TextBuffer.linkify = (self x *: tags) -> exhaust $ map call
       tag.connect 'event' (_ _ ev _) ->
         # That should be better than `webbrowser.open`, I think.
         # Is this function equivalent to `xdg-open`?
-        Gtk.show_uri Gdk.Screen.get_default! part 0 if
+        Gtk.show_uri Gdk.Screen.get_default! p 0 if
           ev.type == Gdk.EventType.BUTTON_RELEASE and not self.get_has_selection!
         # We don't want the TextView to think there's a selection.
         False
-  re.split r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%\d{2}|\([^\s(<>)\'"]+\))+)' x
+
+  # If it doesn't, but is an emoticon, replace it with a pixbuf.
+  '(' + '|'.join (map re.escape self.emotes) + ')',
+    p -> self.append item *: tags where
+      theme = Gtk.IconTheme.get_default!
+      icon  = self.emotes !! p
+      item  = theme.load_icon icon 16 0 if theme.has_icon icon else p
+
+  # All others are appeneded as-is. (The regex here is ignored.)
+  '.', p -> self.append p *: tags
 
 
 # tag :: (Maybe str, **) -> TextTag
