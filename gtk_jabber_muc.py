@@ -18,8 +18,7 @@ import '/sleekxmpp/plugins/xep_0045/XEP_0045'
 
 jid      = 'jid@jabber.org'
 password = 'password'
-room     = 'room@conference.jabber.org'
-nick     = 'nick'
+rooms    = list' ('room@conference.jabber.org', 'nick')
 
 
 ## Gtk tools and extensions.
@@ -204,12 +203,12 @@ self.register_plugin 'xep_0199'
 self.add_event_handler 'session_start' _ ->
   self.get_roster!
   self.send_presence!
-  self.muc.joinMUC room nick maxhistory: '20' wait: True
+  exhaust $ map (r, n) -> (self.muc.joinMUC r n maxhistory: '20') rooms
 
 
 ## UI init stuff.
 
-wnd = Gtk.Window.with icon_name: 'gajim' title: (room + '/' + nick) $ Gtk.Paned.with
+make_pane = (room nick) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Paned.with
@@ -356,10 +355,13 @@ wnd = Gtk.Window.with icon_name: 'gajim' title: (room + '/' + nick) $ Gtk.Paned.
           w.props.buffer.append ', '
         True
 
+wnd = Gtk.Window.with tabs where
+  tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
+  exhaust $ map (r, n) -> (tabs.append_page (make_pane r n) (Gtk.Label r)) rooms
+
 wnd.connect 'delete-event' Gtk.main_quit
 wnd.connect 'delete-event' (_ _) -> self.disconnect!
 wnd.show_all!
-
 
 ## Profit.
 
