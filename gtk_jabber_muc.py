@@ -12,6 +12,7 @@ import '/gi/repository/GObject'
 import '/sleekxmpp/Message'
 import '/sleekxmpp/Presence'
 import '/sleekxmpp/ClientXMPP'
+import '/sleekxmpp/plugins/xep_0045/XEP_0045'
 
 
 ## Config.
@@ -24,15 +25,6 @@ nick     = 'nick'
 
 ## Misc stuff.
 
-# linkify :: str -> [str]
-#
-# Split some text into a sequence of strings, where evenly-numbered ones
-# are hyperlinks.
-#
-linkify = `getattr` 'split' $ re.compile
-  r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%\d{2}|\([^\s(<>)\'"]+\))+)'
-
-
 # colorify :: str -> str
 #
 # Generate a preudorandom color given a seed string.
@@ -41,7 +33,7 @@ linkify = `getattr` 'split' $ re.compile
 colorify = x ->
   r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
   m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
-  '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (+ round m) (r, g, b))
+  '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (bind max 0 <- round m +) (r, g, b))
 
 
 ## Gtk tools and extensions.
@@ -109,40 +101,38 @@ Gtk.Paned.with = classmethod (cls p q *: a **: k) ->
   self
 
 
-# append_with_tags :: (str, *) -> IO ()
+# append :: (str, *) -> IO ()
 #
 # `insert_with_tags` bound to `get_end_iter`.
 #
-Gtk.TextBuffer.append_with_tags = (self text *: tags) ->
+Gtk.TextBuffer.append = (self text *: tags) ->
   self.insert_with_tags self.get_end_iter! text *: tags
 
 
-# linkify_with_tags :: (str, *) -> IO ()
+# linkify :: (str, *) -> IO ()
 #
-# `append_with_tags` that automatically creates clickable links.
+# `append` that automatically creates clickable links.
 #
-Gtk.TextBuffer.linkify_with_tags = (self text *: tags) -> exhaust $ map (f x) -> (f x)
-  cycle (not_link, link) where
-    link = part ->
-      tag = self.create_tag None foreground: '#0011dd' underline: Pango.Underline.SINGLE
-      tag.connect 'event' (this view ev it) ->
+Gtk.TextBuffer.linkify = (self x *: tags) -> exhaust $ map call
+  cycle $ list'
+    part -> self.append part     *: tags
+    part -> self.append part tag *: tags where
+      tag = self.tag foreground: '#0011dd' underline: Pango.Underline.SINGLE
+      tag.connect 'event' (_ _ ev _) ->
         webbrowser.open part if ev.type == Gdk.EventType.BUTTON_RELEASE and
                             not self.get_has_selection!
         # We don't want the TextView to think there's a selection.
         False
+  re.split r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%\d{2}|\([^\s(<>)\'"]+\))+)' x
 
-      self.append_with_tags part tag *: tags
-    not_link = part -> self.append_with_tags part *: tags
-  linkify text
-  
 
-# get_tag :: (str, **) -> TextTag
+# tag :: (Maybe str, **) -> TextTag
 #
 # Find a tag by name, create a new one if none found.
 #
-Gtk.TextBuffer.get_tag = (self name **: k) ->
-  table = self.props.tag_table
-  table.lookup name or self.create_tag name **: k
+Gtk.TextBuffer.tag = (self name: None **: k) ->
+  # NOTE `a and b or c` <=> `b or c if a else c`.
+  not (name is None) and self.props.tag_table.lookup name or self.create_tag name **: k
 
 
 # find :: (a, int) -> iter [TreeIter]
@@ -164,13 +154,31 @@ delegate = f -> bind GObject.idle_add ((_ -> False) <- f)
 
 ## SleekXMPP extensions.
 
-Message.body = property $ !! 'body'
-Message.nick = property $ !! 'mucnick'
+# _ :: a
+#
+# Aliases for various stanza fields.
+#
+Message.body    = property $ !! 'body'
+Message.nick    = property $ !! 'mucnick'
+Message.subject = property $ !! 'subject'
+Presence.type   = property $ !! 'type'
+Presence.nick   = property $ !! 'nick' <- !! 'muc'
 
-Presence.type = property $ !! 'type'
-Presence.nick = property $ !! 'nick' <- !! 'muc'
 
+# muc :: XEP_0045
+#
+# Alias for `self.plugin !! 'xep_0045'`.
+#
 ClientXMPP.muc = property $ !! 'xep_0045' <- `getattr` 'plugin'
+
+
+# handle_groupchat_subject :: Message -> IO ()
+#
+# Patch the original subject handler to also emit `muc::%s::subject` signal.
+#
+XEP_0045.handle_groupchat_subject = (self msg) ->
+  self.xmpp.event 'groupchat_subject' msg
+  self.xmpp.event ('muc::{}::subject'.format (msg !! 'from').bare) msg
 
 
 ## XMPP init stuff.
@@ -206,41 +214,54 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
         wrap_mode:      Gtk.WrapMode.WORD
 
       buffer = view.props.buffer
-      time      = buffer.create_tag None foreground: '#777777'
-      text      = buffer.create_tag None foreground: '#333333'
-      highlight = buffer.create_tag None foreground: '#990011'
-      joined_t  = buffer.create_tag None foreground: '#119900' weight: Pango.Weight.BOLD
-      left_t    = buffer.create_tag None foreground: '#991100' weight: Pango.Weight.BOLD
-      system    = buffer.create_tag None foreground: '#dd4400' style: Pango.Style.ITALIC
+      time      = buffer.tag foreground: '#777777'
+      highlight = buffer.tag foreground: '#990011'
+      text      = buffer.tag foreground: '#333333'
+      system    = buffer.tag foreground: '#dd4400' style:  Pango.Style.ITALIC
+
+      ntag = n -> buffer.tag ('n#' + n) foreground: (colorify n) weight: Pango.Weight.BOLD
+      mtag = n -> buffer.tag ('m#' + n) foreground: (colorify n) style:  Pango.Style.ITALIC
 
       joined = x ->
-        buffer.append_with_tags (strftime '\n%H:%M:%S +') time
-        buffer.append_with_tags x.nick joined_t
+        buffer.append (strftime '\n%H:%M:%S +') time
+        buffer.append x.nick $ ntag x.nick
 
       left = x ->
-        buffer.append_with_tags (strftime '\n%H:%M:%S −') time
-        buffer.append_with_tags x.nick left_t
+        buffer.append (strftime '\n%H:%M:%S −') time
+        buffer.append x.nick $ ntag x.nick
 
       message = x ->
-        ntag = buffer.get_tag ('n#' + x.nick) foreground: (colorify x.nick) weight: Pango.Weight.BOLD
-        mtag = buffer.get_tag ('m#' + x.nick) foreground: (colorify x.nick) style: Pango.Style.ITALIC
-
-        sysmsg  = x.nick == ''
-        selfref = x.body.startswith '/me '
-        thisref = nick in x.body
-
-        buffer.append_with_tags (strftime '\n%H:%M:%S ') time
+        x.time = strftime '\n%H:%M:%S '
 
         switch
-          sysmsg =
-            buffer.linkify_with_tags x.body system
-          selfref =
-            buffer.append_with_tags (x.nick + ' ') mtag
-            buffer.linkify_with_tags (x.body !! slice 4 None) mtag
-          True =
-            buffer.append_with_tags (x.nick + ' ') ntag
-            buffer.linkify_with_tags x.body (highlight if thisref else text)
+          x.nick == '' =  # Server-issued message.
+            buffer.append  x.time time
+            buffer.linkify x.body system
 
+          x.body.startswith '/me ' =  # Self-referencing message.
+            buffer.append   x.time time
+            buffer.append  (x.nick + ' ')           $ mtag x.nick
+            buffer.linkify (x.body !! slice 4 None) $ mtag x.nick
+
+          nick in x.body =  # Highlighted message.
+            buffer.append x.time highlight
+            buffer.append x.nick $ ntag x.nick
+            buffer.append ': ' time
+            buffer.linkify x.body text
+
+          True =  # Boring stuff you shouldn't read.
+            buffer.append  x.time   time
+            buffer.append  x.nick $ ntag x.nick
+            buffer.append  ': '     time
+            buffer.linkify x.body   text
+
+      subject = x ->
+        buffer.append (strftime '\n%H:%M:%S ') time
+        buffer.append  x.nick system
+        buffer.append  'has set the subject to: ' system
+        buffer.linkify x.subject system
+
+      self.add_event_handler ('muc::{}::subject'.format     room) $ delegate subject
       self.add_event_handler ('muc::{}::message'.format     room) $ delegate message
       self.add_event_handler ('muc::{}::got_online'.format  room) $ delegate joined
       self.add_event_handler ('muc::{}::got_offline'.format room) $ delegate left
@@ -278,13 +299,31 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
     #
     # An editable field for sending messages.
     #
-    entry = Gtk.TextView editable: True
-    entry.connect 'key-press-event' (w ev) ->
+    entry = Gtk.TextView
+      editable:  True
+      wrap_mode: Gtk.WrapMode.WORD
+
+    entry.connect 'key-press-event' $ (w ev) -> switch
+      # `Enter` sends a message.
       # Use `Shift+Enter` or `Numpad Enter` to insert a newline.
-      ev.keyval == Gdk.KEY_Return and not (ev.state & Gdk.ModifierType.SHIFT_MASK) and
+      ev.keyval == Gdk.KEY_Return and not (ev.state & Gdk.ModifierType.SHIFT_MASK) =
         self.send_message room w.props.buffer.props.text mtype: 'groupchat'
         w.props.buffer.props.text = ''
         True
+
+      # `Tab` autocompletes a nickname.
+      # Same thing about `Shift` applies.
+      ev.keyval == Gdk.KEY_Tab and not (ev.state & Gdk.ModifierType.SHIFT_MASK) =
+        st = w.props.buffer.props.text
+        ns = list $ filter x -> (x.startswith st if st) $ self.muc.rooms !! room
+
+        switch
+          len ns == 0 = True
+          len ns == 1 =
+            w.props.buffer.append $ ''.join $ drop (len st) $ head ns
+            w.props.buffer.append ', '
+            True
+          True = True # TODO
 
 wnd.connect 'delete-event' Gtk.main_quit
 wnd.connect 'delete-event' (_ _) -> self.disconnect!
