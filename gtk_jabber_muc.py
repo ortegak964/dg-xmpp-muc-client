@@ -23,19 +23,6 @@ room     = 'room@conference.jabber.org'
 nick     = 'nick'
 
 
-## Misc stuff.
-
-# colorify :: str -> str
-#
-# Generate a preudorandom color given a seed string.
-# Luminance of that color is capped at 0.5.
-#
-colorify = x ->
-  r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
-  m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
-  '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (bind max 0 <- round m +) (r, g, b))
-
-
 ## Gtk tools and extensions.
 
 # at_bottom :: bool
@@ -109,14 +96,32 @@ Gtk.TextBuffer.append = (self text *: tags) ->
   self.insert_with_tags self.get_end_iter! text *: tags
 
 
+# emotify :: (str, *) -> IO ()
+#
+# `append` that replaces text emoticons with `GdkPixbuf`s.
+#
+Gtk.TextBuffer.emotify = (self x *: tags) -> exhaust $ map call
+  cycle $ list'
+    p -> self.append p *: tags
+    p ->
+      theme = Gtk.IconTheme.get_default!
+      icon  = self.emotes !! p
+
+      self.append p *: tags if not (theme.has_icon icon) else
+        self.insert_pixbuf self.get_end_iter!
+          theme.load_icon icon 16 Gtk.IconLookupFlags.USE_BUILTIN
+
+  re.split ('(' + '|'.join (map re.escape self.emotes) + ')') x
+
+
 # linkify :: (str, *) -> IO ()
 #
-# `append` that automatically creates clickable links.
+# `emotify` that automatically creates clickable links.
 #
 Gtk.TextBuffer.linkify = (self x *: tags) -> exhaust $ map call
   cycle $ list'
-    part -> self.append part     *: tags
-    part -> self.append part tag *: tags where
+    part -> self.emotify part     *: tags
+    part -> self.append  part tag *: tags where
       tag = self.tag foreground: '#0011dd' underline: Pango.Underline.SINGLE
       tag.connect 'event' (_ _ ev _) ->
         webbrowser.open part if ev.type == Gdk.EventType.BUTTON_RELEASE and
@@ -204,6 +209,16 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
     vexpand: True
 
     Gtk.Frame.scrollable view hexpand: True vexpand: True auto_rewind: True where
+      # colorify :: str -> str
+      #
+      # Generate a preudorandom color given a seed string.
+      # Luminance of that color is capped at 0.5.
+      #
+      colorify = x ->
+        r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
+        m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
+        '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (bind max 0 <- round m +) (r, g, b))
+
       # view :: TextView
       #
       # Where messages go.
@@ -218,9 +233,20 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
       highlight = buffer.tag foreground: '#990011'
       text      = buffer.tag foreground: '#333333'
       system    = buffer.tag foreground: '#dd4400' style:  Pango.Style.ITALIC
-
       ntag = n -> buffer.tag ('n#' + n) foreground: (colorify n) weight: Pango.Weight.BOLD
       mtag = n -> buffer.tag ('m#' + n) foreground: (colorify n) style:  Pango.Style.ITALIC
+
+      buffer.emotes = dict'
+        ':)',  'face-smile'
+        ':-)', 'face-smile'
+        ':D',  'face-laugh'
+        ':-D', 'face-laugh'
+        ':(',  'face-sad'
+        ':-(', 'face-sad'
+        ":'(", 'face-crying'
+        ':|',  'face-plain'
+        ':-|', 'face-plain'
+        ':<',  'face-worried'
 
       joined = x ->
         buffer.append (strftime '\n%H:%M:%S +') time
@@ -304,26 +330,23 @@ wnd = Gtk.Window.with $ Gtk.Paned.with
       wrap_mode: Gtk.WrapMode.WORD
 
     entry.connect 'key-press-event' $ (w ev) -> switch
-      # `Enter` sends a message.
-      # Use `Shift+Enter` or `Numpad Enter` to insert a newline.
-      ev.keyval == Gdk.KEY_Return and not (ev.state & Gdk.ModifierType.SHIFT_MASK) =
+      # Use `Shift+key` to override any of the following actions.
+      ev.state & Gdk.ModifierType.SHIFT_MASK = False
+
+      ev.keyval == Gdk.KEY_Return =
+        # `Enter` sends a message.
         self.send_message room w.props.buffer.props.text mtype: 'groupchat'
         w.props.buffer.props.text = ''
         True
 
-      # `Tab` autocompletes a nickname.
-      # Same thing about `Shift` applies.
-      ev.keyval == Gdk.KEY_Tab and not (ev.state & Gdk.ModifierType.SHIFT_MASK) =
+      ev.keyval == Gdk.KEY_Tab =
+        # `Tab` autocompletes a nickname.
         st = w.props.buffer.props.text
         ns = list $ filter x -> (x.startswith st if st) $ self.muc.rooms !! room
-
-        switch
-          len ns == 0 = True
-          len ns == 1 =
-            w.props.buffer.append $ ''.join $ drop (len st) $ head ns
-            w.props.buffer.append ', '
-            True
-          True = True # TODO
+        ns and
+          w.props.buffer.append $ ''.join $ drop (len st) $ head ns
+          w.props.buffer.append ', '
+        True
 
 wnd.connect 'delete-event' Gtk.main_quit
 wnd.connect 'delete-event' (_ _) -> self.disconnect!
