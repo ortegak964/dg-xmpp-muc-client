@@ -1,5 +1,4 @@
 import '/re'
-import '/webbrowser'
 import '/hashlib/md5'
 import '/time/strftime'
 import '/itertools/cycle'
@@ -24,6 +23,9 @@ nick     = 'nick'
 
 
 ## Gtk tools and extensions.
+
+Gdk.Pixbuf = import '/gi/repository/GdkPixbuf/Pixbuf'
+
 
 # at_bottom :: bool
 #
@@ -90,10 +92,12 @@ Gtk.Paned.with = classmethod (cls p q *: a **: k) ->
 
 # append :: (str, *) -> IO ()
 #
-# `insert_with_tags` bound to `get_end_iter`.
+# `insert_with_tags` and `insert_pixbuf` bound to `get_end_iter`.
 #
-Gtk.TextBuffer.append = (self text *: tags) ->
-  self.insert_with_tags self.get_end_iter! text *: tags
+Gtk.TextBuffer.append = (self item *: tags) -> switch
+  item :: Gdk.Pixbuf = self.insert_pixbuf    self.get_end_iter! item
+  item :: str        = self.insert_with_tags self.get_end_iter! item *: tags
+  True = raise $ TypeError $ '{} is not insertable'.format item
 
 
 # emotify :: (str, *) -> IO ()
@@ -107,9 +111,8 @@ Gtk.TextBuffer.emotify = (self x *: tags) -> exhaust $ map call
       theme = Gtk.IconTheme.get_default!
       icon  = self.emotes !! p
 
-      self.append p *: tags if not (theme.has_icon icon) else
-        self.insert_pixbuf self.get_end_iter!
-          theme.load_icon icon 16 Gtk.IconLookupFlags.USE_BUILTIN
+      self.append *: tags
+        theme.load_icon icon 16 0 if theme.has_icon icon else p
 
   re.split ('(' + '|'.join (map re.escape self.emotes) + ')') x
 
@@ -122,10 +125,15 @@ Gtk.TextBuffer.linkify = (self x *: tags) -> exhaust $ map call
   cycle $ list'
     part -> self.emotify part     *: tags
     part -> self.append  part tag *: tags where
+      # FIXME should use system colors.
+      # FIXME should change mouse pointer appearance.
+      # FIXME should add some context menu items, such as "Copy Location."
       tag = self.tag foreground: '#0011dd' underline: Pango.Underline.SINGLE
       tag.connect 'event' (_ _ ev _) ->
-        webbrowser.open part if ev.type == Gdk.EventType.BUTTON_RELEASE and
-                            not self.get_has_selection!
+        # That should be better than `webbrowser.open`, I think.
+        # Is this function equivalent to `xdg-open`?
+        Gtk.show_uri self.get_screen! part 0 if
+          ev.type == Gdk.EventType.BUTTON_RELEASE and not self.get_has_selection!
         # We don't want the TextView to think there's a selection.
         False
   re.split r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%\d{2}|\([^\s(<>)\'"]+\))+)' x
@@ -201,7 +209,7 @@ self.add_event_handler 'session_start' _ ->
 
 ## UI init stuff.
 
-wnd = Gtk.Window.with $ Gtk.Paned.with
+wnd = Gtk.Window.with icon_name: 'gajim' title: (room + '/' + nick) $ Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Paned.with
