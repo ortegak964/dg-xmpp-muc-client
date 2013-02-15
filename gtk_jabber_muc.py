@@ -128,26 +128,32 @@ reapply = (x ((rx, f), *rest)) -> switch
 #
 Gtk.TextBuffer.linkify = (self x *: tags) -> reapply x $ list'
   # If some part looks like a link, we wrap it in a tag.
-  r'([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%\d{2}|\([^\s(<>)\'"]+\))+)',
-    p -> self.append  p tag *: tags where
+  r'(?i)([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%[\da-f]{2}|\([^\s(<>)\'"]+\))+)',
+    p -> self.append p tag *: tags where
       # FIXME should use system colors.
       # FIXME should change mouse pointer appearance.
+      #   self.props.window.set_cursor $ Gdk.Cursor Gdk.CursorType.HAND2
+      #   or something
       # FIXME should add some context menu items, such as "Copy Location."
+      #   (would probably need to intercept 3rd mouse button release)
       tag = self.tag foreground: '#0011dd' underline: Pango.Underline.SINGLE
-      tag.connect 'event' (_ _ ev _) ->
-        # That should be better than `webbrowser.open`, I think.
-        # Is this function equivalent to `xdg-open`?
-        Gtk.show_uri Gdk.Screen.get_default! p 0 if
-          ev.type == Gdk.EventType.BUTTON_RELEASE and not self.get_has_selection!
-        # We don't want the TextView to think there's a selection.
-        False
+      tag.connect 'event' $ (_ _ ev _) -> switch
+        ev.type == Gdk.EventType.BUTTON_RELEASE and not self.get_has_selection! =
+          # That should be better than `webbrowser.open`, I think.
+          # Is this function equivalent to `xdg-open`?
+          Gtk.show_uri Gdk.Screen.get_default! p 0
+          # We don't want the TextView to think there's a selection.
+          False
+
+        # Or maybe we do.
+        True = True
 
   # If it doesn't, but is an emoticon, replace it with a pixbuf.
   '(' + '|'.join (map re.escape self.emotes) + ')',
     p -> self.append item *: tags where
       theme = Gtk.IconTheme.get_default!
       icon  = self.emotes !! p
-      item  = theme.load_icon icon 16 0 if theme.has_icon icon else p
+      item  = (theme.load_icon icon 16 0 if theme.has_icon icon else p)
 
   # All others are appeneded as-is. (The regex here is ignored.)
   '.', p -> self.append p *: tags
@@ -158,7 +164,7 @@ Gtk.TextBuffer.linkify = (self x *: tags) -> reapply x $ list'
 # Find a tag by name, create a new one if none found.
 #
 Gtk.TextBuffer.tag = (self name: None **: k) ->
-  # NOTE `a and b or c` <=> `b or c if a else c`.
+  # NOTE `a and b or c` <=> `b if a and b else c`.
   not (name is None) and self.props.tag_table.lookup name or self.create_tag name **: k
 
 
@@ -214,6 +220,7 @@ self = ClientXMPP jid password
 self.register_plugin 'xep_0030'
 self.register_plugin 'xep_0045'
 self.register_plugin 'xep_0199'
+#self.register_plugin 'xep_0048' $ dict auto_join: True storage_method: 'xep_0223'
 
 self.add_event_handler 'session_start' _ ->
   self.get_roster!
@@ -306,7 +313,7 @@ make_pane = (room nick) -> Gtk.Paned.with
       subject = x ->
         buffer.append (strftime '\n%H:%M:%S ') time
         buffer.append  x.nick system
-        buffer.append  'has set the subject to: ' system
+        buffer.append  ' has set the subject to: ' system
         buffer.linkify x.subject system
 
       self.add_event_handler ('muc::{}::subject'.format     room) $ delegate subject
