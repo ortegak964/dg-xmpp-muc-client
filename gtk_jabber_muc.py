@@ -141,8 +141,8 @@ Gtk.TextBuffer.linkify = (self x *: tags) -> reapply x $ list'
       icon  = self.emotes !! p
       item  = (theme.load_icon icon 16 0 if theme.has_icon icon else p)
 
-  # All others are appeneded as-is. (The regex here is ignored.)
-  '.', p -> self.append p *: tags
+  # All others are appeneded as-is.
+  None, p -> self.append p *: tags
 
 
 # tag :: (Maybe str, **) -> TextTag
@@ -154,31 +154,38 @@ Gtk.TextBuffer.tag = (self name: None **: k) ->
   not (name is None) and self.props.tag_table.lookup name or self.create_tag name **: k
 
 
-# linkifyable :: ** -> GtkTextView
+# get_link_tags_at :: (int, int) -> [TextTag]
 #
-# Create a `GtkTextView`, handle its `event` signal properly
+# `filter ... $ get_tags $ get_iter_at_location $ window_to_buffer_coords`
+#
+Gtk.TextView.get_link_tags_at = (self x y) -> list
+  filter t -> (getattr t 'islink' False)
+    Gtk.TextIter.get_tags
+      self.get_iter_at_location *:
+        self.window_to_buffer_coords Gtk.TextWindowType.WIDGET x y
+
+
+# linkifyable :: ** -> TextView
+#
+# Create a `GtkTextView` and handle its signals properly
 # to allow clickable links.
 #
 Gtk.TextView.linkifyable = classmethod $ (cls **: k) ->
   self = cls **: k
-  self.connect 'event' (self ev) ->
-    x, y = self.window_to_buffer_coords Gtk.TextWindowType.WIDGET ev.button.x ev.button.y
-    it   = self.get_iter_at_location x y
-    tags = list $ filter t -> (getattr t 'islink' False) it.get_tags!
+  self.cursors = Gdk.Cursor Gdk.CursorType.XTERM, Gdk.Cursor Gdk.CursorType.HAND2
 
-    # Ignore dragging movements.
-    self.props.buffer.get_has_selection! or switch
-      ev.type == Gdk.EventType.MOTION_NOTIFY =
-        ev.window.set_cursor $ Gdk.Cursor
-          Gdk.CursorType.HAND2 if tags else Gdk.CursorType.XTERM
+  self.connect 'motion-notify-event' (self ev) ->
+    ev.window.set_cursor $ self.cursors !! bool (self.get_link_tags_at ev.x ev.y)
 
-      ev.type == Gdk.EventType.BUTTON_RELEASE and ev.button.button == 1 and tags =
+  self.connect 'button-release-event' (self ev) ->
+    ev.button == 1 and
+      exhaust $ map
         # That should be better than `webbrowser.open`, I think.
         # Is this function equivalent to `xdg-open`?
-        Gtk.show_uri Gdk.Screen.get_default! (head tags).props.name 0
+        t -> Gtk.show_uri ev.window.get_screen! t.props.name 0
+        self.get_link_tags_at ev.x ev.y
 
-    False
-
+  # FIXME should also add some items to the popup menu.
   self
 
 
