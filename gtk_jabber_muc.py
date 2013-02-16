@@ -131,22 +131,8 @@ Gtk.TextBuffer.linkify = (self x *: tags) -> reapply x $ list'
   r'(?i)([a-z][a-z0-9+\.-]*:(?:[,\.?]?[^\s(<>)"\',\.?%]|%[\da-f]{2}|\([^\s(<>)\'"]+\))+)',
     p -> self.append p tag *: tags where
       # FIXME should use system colors.
-      # FIXME should change mouse pointer appearance.
-      #   self.props.window.set_cursor $ Gdk.Cursor Gdk.CursorType.HAND2
-      #   or something
-      # FIXME should add some context menu items, such as "Copy Location."
-      #   (would probably need to intercept 3rd mouse button release)
-      tag = self.tag foreground: '#0011dd' underline: Pango.Underline.SINGLE
-      tag.connect 'event' $ (_ _ ev _) -> switch
-        ev.type == Gdk.EventType.BUTTON_RELEASE and not self.get_has_selection! =
-          # That should be better than `webbrowser.open`, I think.
-          # Is this function equivalent to `xdg-open`?
-          Gtk.show_uri Gdk.Screen.get_default! p 0
-          # We don't want the TextView to think there's a selection.
-          False
-
-        # Or maybe we do.
-        True = True
+      tag = self.tag p foreground: '#0011dd' underline: Pango.Underline.SINGLE
+      tag.islink = True
 
   # If it doesn't, but is an emoticon, replace it with a pixbuf.
   '(' + '|'.join (map re.escape self.emotes) + ')',
@@ -166,6 +152,34 @@ Gtk.TextBuffer.linkify = (self x *: tags) -> reapply x $ list'
 Gtk.TextBuffer.tag = (self name: None **: k) ->
   # NOTE `a and b or c` <=> `b if a and b else c`.
   not (name is None) and self.props.tag_table.lookup name or self.create_tag name **: k
+
+
+# linkifyable :: ** -> GtkTextView
+#
+# Create a `GtkTextView`, handle its `event` signal properly
+# to allow clickable links.
+#
+Gtk.TextView.linkifyable = classmethod $ (cls **: k) ->
+  self = cls **: k
+  self.connect 'event' (self ev) ->
+    x, y = self.window_to_buffer_coords Gtk.TextWindowType.WIDGET ev.button.x ev.button.y
+    it   = self.get_iter_at_location x y
+    tags = list $ filter t -> (getattr t 'islink' False) it.get_tags!
+
+    # Ignore dragging movements.
+    self.props.buffer.get_has_selection! or switch
+      ev.type == Gdk.EventType.MOTION_NOTIFY =
+        ev.window.set_cursor $ Gdk.Cursor
+          Gdk.CursorType.HAND2 if tags else Gdk.CursorType.XTERM
+
+      ev.type == Gdk.EventType.BUTTON_RELEASE and ev.button.button == 1 and tags =
+        # That should be better than `webbrowser.open`, I think.
+        # Is this function equivalent to `xdg-open`?
+        Gtk.show_uri Gdk.Screen.get_default! (head tags).props.name 0
+
+    False
+
+  self
 
 
 # find :: (a, int) -> iter [TreeIter]
@@ -252,7 +266,7 @@ make_pane = (room nick) -> Gtk.Paned.with
       #
       # Where messages go.
       #
-      view = Gtk.TextView
+      view = Gtk.TextView.linkifyable
         editable:       False
         cursor_visible: False
         wrap_mode:      Gtk.WrapMode.WORD
