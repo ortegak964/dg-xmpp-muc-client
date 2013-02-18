@@ -11,14 +11,14 @@ import '/gi/repository/GObject'
 import '/sleekxmpp/Message'
 import '/sleekxmpp/Presence'
 import '/sleekxmpp/ClientXMPP'
-import '/sleekxmpp/plugins/xep_0045/XEP_0045'
 
 
 ## Config.
 
-jid      = 'jid@jabber.org'
-password = 'password'
-rooms    = list' ('room@conference.jabber.org', 'nick')
+XMPP_USER_ID   = 'jid@example.com'
+XMPP_PASSWORD  = 'password'
+XMPP_MUC_ROOMS = list'
+  'room@conference.example.com', 'nick'
 
 
 ## Gtk tools and extensions.
@@ -226,18 +226,9 @@ Presence.nick   = property $ !! 'nick' <- !! 'muc'
 ClientXMPP.muc = property $ !! 'xep_0045' <- `getattr` 'plugin'
 
 
-# handle_groupchat_subject :: Message -> IO ()
-#
-# Patch the original subject handler to also emit `muc::%s::subject` signal.
-#
-XEP_0045.handle_groupchat_subject = (self msg) ->
-  self.xmpp.event 'groupchat_subject' msg
-  self.xmpp.event ('muc::{}::subject'.format (msg !! 'from').bare) msg
-
-
 ## XMPP init stuff.
 
-self = ClientXMPP jid password
+self = ClientXMPP XMPP_USER_ID XMPP_PASSWORD
 self.register_plugin 'xep_0030'
 self.register_plugin 'xep_0045'
 self.register_plugin 'xep_0199'
@@ -246,7 +237,11 @@ self.register_plugin 'xep_0199'
 self.add_event_handler 'session_start' _ ->
   self.get_roster!
   self.send_presence!
-  exhaust $ map (r, n) -> (self.muc.joinMUC r n maxhistory: '20') rooms
+  exhaust $ map (r, n) -> (self.muc.joinMUC r n maxhistory: '20') XMPP_MUC_ROOMS
+
+self.add_event_handler 'groupchat_subject' m ->
+  # FIXME this should probably be sent as a pull requiest to SleekXMPP.
+  self.event ('muc::{}::subject'.format (m !! 'from').bare) m
 
 
 ## UI init stuff.
@@ -269,10 +264,6 @@ make_pane = (room nick) -> Gtk.Paned.with
         m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
         '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (bind max 0 <- round m +) (r, g, b))
 
-      # view :: TextView
-      #
-      # Where messages go.
-      #
       view = Gtk.TextView.linkifyable
         editable:       False
         cursor_visible: False
@@ -315,15 +306,15 @@ make_pane = (room nick) -> Gtk.Paned.with
             buffer.linkify x.body system
 
           x.body.startswith '/me ' =  # Self-referencing message.
-            buffer.append   x.time time
+            buffer.append   x.time                    time
             buffer.append  (x.nick + ' ')           $ mtag x.nick
             buffer.linkify (x.body !! slice 4 None) $ mtag x.nick
 
           nick in x.body =  # Highlighted message.
-            buffer.append x.time highlight
-            buffer.append x.nick $ ntag x.nick
-            buffer.append ': ' time
-            buffer.linkify x.body text
+            buffer.append  x.time   highlight
+            buffer.append  x.nick $ ntag x.nick
+            buffer.append  ': '     time
+            buffer.linkify x.body   text
 
           True =  # Boring stuff you shouldn't read.
             buffer.append  x.time   time
@@ -343,10 +334,7 @@ make_pane = (room nick) -> Gtk.Paned.with
       self.add_event_handler ('muc::{}::got_offline'.format room) $ delegate left
 
     Gtk.Frame.scrollable roster vexpand: True where
-      # roster :: TreeView
-      #
-      # A list of all participants.
-      #
+
       roster = Gtk.TreeView model where
         # status :: str -> str
         #
@@ -358,10 +346,6 @@ make_pane = (room nick) -> Gtk.Paned.with
           xa:   'empathy-extended-away'
         ).get x 'empathy-available'
 
-        # model :: ListStore
-        #
-        # The same thing as raw data.
-        #
         model = Gtk.ListStore str str
         model.set_sort_column_id 0 Gtk.SortType.ASCENDING
 
@@ -385,13 +369,9 @@ make_pane = (room nick) -> Gtk.Paned.with
     #
     send = b -> b.set_text '' where self.send_message room b.props.text mtype: 'groupchat'
 
-    # entry :: Entry
-    #
-    # An editable field for sending messages.
-    #
     entry = Gtk.TextView editable: True wrap_mode: Gtk.WrapMode.WORD
     entry.connect 'key-press-event' $ (w ev) -> switch
-      # `Return` send s the message.
+      # `Return` sends the message.
       # `Tab` autocompletes a nickname at the start of the message.
       # Using any of these with `Shift` reverts them to their original action.
       ev.state & Gdk.ModifierType.SHIFT_MASK = False
@@ -402,7 +382,7 @@ make_pane = (room nick) -> Gtk.Paned.with
 
 wnd = Gtk.Window.with tabs where
   tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
-  exhaust $ map (r, n) -> (tabs.append_page (make_pane r n) (Gtk.Label r)) rooms
+  exhaust $ map (r, n) -> (tabs.append_page (make_pane r n) (Gtk.Label r)) XMPP_MUC_ROOMS
 
 wnd.connect 'delete-event' Gtk.main_quit
 wnd.connect 'delete-event' (_ _) -> self.disconnect!
