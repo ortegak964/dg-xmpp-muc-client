@@ -240,7 +240,7 @@ self.add_event_handler 'session_start' _ ->
   exhaust $ map (r, n) -> (self.muc.joinMUC r n maxhistory: '20') XMPP_MUC_ROOMS
 
 self.add_event_handler 'groupchat_subject' m ->
-  # FIXME this should probably be sent as a pull requiest to SleekXMPP.
+  # FIXME this should probably be sent as a pull request to SleekXMPP.
   self.event ('muc::{}::subject'.format (m !! 'from').bare) m
 
 
