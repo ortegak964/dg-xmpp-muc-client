@@ -47,16 +47,16 @@ Gtk.Adjustment.auto_rewind = property self ->
   self.connect       'changed' a -> (a.set_value a.props.upper if x)
 
 
-# with :: (Widget, *, **) -> Container
+# with :: (*, **) -> Container
 #
 # 1. Create a widget.
-# 2. `add` another widget.
+# 2. `add` some more widgets.
 # 3. ???????
 # 4. UI!
 #
-Gtk.Container.with = classmethod (cls other *: a **: k) ->
-  self = cls *: a **: k
-  self.add other
+Gtk.Container.with = classmethod (cls *: others **: k) ->
+  self = cls **: k
+  for others self.add
   self
 
 
@@ -68,6 +68,19 @@ Gtk.Frame.scrollable = classmethod (cls other auto_rewind: False **: k) ->
   scroll = Gtk.ScrolledWindow.with other
   scroll.props.vadjustment.auto_rewind if auto_rewind
   cls.with scroll margin: 2 shadow_type: Gtk.ShadowType.ETCHED_IN **: k
+
+
+# replace_page :: (int, Widget) -> ()
+#
+# Replace the widget on the n-th page of a notebook.
+#
+Gtk.Notebook.replace_page = (self n new) ->
+  move  = self.get_current_page! == n
+  label = self.get_tab_label $ self.get_nth_page n
+  self.remove_page n
+  self.insert_page new label n
+  new.show_all!
+  self.set_current_page n if move
 
 
 # will_stretch :: Widget -> bool
@@ -178,12 +191,10 @@ Gtk.TextView.linkifyable = classmethod $ (cls **: k) ->
     ev.window.set_cursor $ self.cursors !! bool (self.get_link_tags_at ev.x ev.y)
 
   self.connect 'button-release-event' (self ev) ->
-    ev.button == 1 and
-      exhaust $ map
-        # That should be better than `webbrowser.open`, I think.
-        # Is this function equivalent to `xdg-open`?
-        t -> Gtk.show_uri ev.window.get_screen! t.props.name 0
-        self.get_link_tags_at ev.x ev.y
+    ev.button == 1 and for (self.get_link_tags_at ev.x ev.y) t ->
+      # That should be better than `webbrowser.open`, I think.
+      # Is this function equivalent to `xdg-open`?
+      Gtk.show_uri ev.window.get_screen! t.props.name 0
 
   # FIXME should also add some items to the popup menu.
   self
@@ -217,6 +228,8 @@ Message.nick    = property $ !! 'mucnick'
 Message.subject = property $ !! 'subject'
 Presence.type   = property $ !! 'type'
 Presence.nick   = property $ !! 'nick' <- !! 'muc'
+Presence.room   = property $ !! 'room' <- !! 'muc'
+Presence.error  = property $ !! 'condition' <- !! 'error'
 
 
 # muc :: XEP_0045
@@ -237,7 +250,6 @@ self.register_plugin 'xep_0199'
 self.add_event_handler 'session_start' _ ->
   self.get_roster!
   self.send_presence!
-  exhaust $ map (r, n) -> (self.muc.joinMUC r n maxhistory: '20') XMPP_MUC_ROOMS
 
 self.add_event_handler 'groupchat_subject' m ->
   # FIXME this should probably be sent as a pull request to SleekXMPP.
@@ -246,7 +258,11 @@ self.add_event_handler 'groupchat_subject' m ->
 
 ## UI init stuff.
 
-make_pane = (room nick) -> Gtk.Paned.with
+# make_pane :: str -> Widget
+#
+# Create a normal room display.
+#
+make_pane = room -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Paned.with
@@ -310,7 +326,7 @@ make_pane = (room nick) -> Gtk.Paned.with
             buffer.append  (x.nick + ' ')           $ mtag x.nick
             buffer.linkify (x.body !! slice 4 None) $ mtag x.nick
 
-          nick in x.body =  # Highlighted message.
+          self.muc.ourNicks !! room in x.body =  # Highlighted message.
             buffer.append  x.time   highlight
             buffer.append  x.nick $ ntag x.nick
             buffer.append  ': '     time
@@ -351,7 +367,7 @@ make_pane = (room nick) -> Gtk.Paned.with
 
         self.add_event_handler ('muc::{}::presence'.format room) $ delegate p ->
           # 1. Remove the old entry.
-          exhaust $ map (model !!~) $ model.find p.nick 0
+          for (model.find p.nick 0) (model !!~)
           # 2. Add the same entry.
           #    (Easier than checking if there's already one.)
           model.append (p.nick, status p.type) if p.type != 'unavailable'
@@ -380,9 +396,78 @@ make_pane = (room nick) -> Gtk.Paned.with
         map (+ ', ') $ self.muc.rooms !! room
 
 
+# error_message :: Presence -> Widget
+#
+# Create an exceptional case handling UI.
+#
+# FIXME it's awful.
+#
+error_message = p -> Gtk.Grid.with
+  orientation: Gtk.Orientation.VERTICAL
+
+  Gtk.Label $ switch
+    p.error == 'conflict'              = 'Nickname {.nick} already taken.'.format p
+    p.error == 'forbidden'             = 'Banned.'
+    p.error == 'not-allowed'           = "Couldn't create a new room."
+    p.error == 'item-not-found'        = 'This room is locked.'
+    p.error == 'not-authorized'        = 'Password required.'
+    p.error == 'service-unavailable'   = 'This room is overcrowded.'
+    p.error == 'registration-required' = 'Not a member of this room.'
+    True = 'Unknown error: {.error}.'.format p
+
+  switch
+    p.error == 'conflict' = Gtk.Grid.with entry retry where
+      entry = Gtk.Entry text: p.nick
+      retry = Gtk.Button 'Try again'
+
+      retry_f = _ ->
+        entry.set_sensitive False
+        retry.set_sensitive False
+        self.muc.joinMUC p.room entry.props.text maxhistory: '20'
+
+      entry.connect 'activate' retry_f
+      retry.connect 'clicked'  retry_f
+
+    p.error == 'not-authorized' = Gtk.Grid.with entry retry where
+      entry = Gtk.Entry visibility: False placeholder_text: 'Know one?'
+      retry = Gtk.Button 'Try again'
+
+      retry_f = _ ->
+        entry.set_sensitive False
+        retry.set_sensitive False
+        self.muc.joinMUC p.room p.nick password: entry.props.text maxhistory: '20'
+
+      entry.connect 'activate' retry_f
+      retry.connect 'clicked'  retry_f
+
+    True = retry where
+      retry = Gtk.Button 'Try again'
+      retry.connect 'clicked' _ ->
+        retry.set_sensitive False
+        self.muc.joinMUC p.room p.nick maxhistory: '20'
+
+
 wnd = Gtk.Window.with tabs where
   tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
-  exhaust $ map (r, n) -> (tabs.append_page (make_pane r n) (Gtk.Label r)) XMPP_MUC_ROOMS
+  nums = dict!
+  wgts = dict!
+
+  self.add_event_handler 'session_start' $ delegate $ _ -> for XMPP_MUC_ROOMS (r, n) ->
+    # NOTE `make_pane` should be called once per room, then reused.
+    #  Attempting to remove it will result in a memory leak since
+    #  `self` keeps references to event handlers and all their closures.
+    #
+    #  Also, it should be created *before* calling `joinMUC` as
+    #  it connects to various signals that may otherwise be ignored.
+    #  It's never a good thing when a half of the roster is missing.
+    wgts !! r = make_pane r
+    nums !! r = tabs.append_page (wgts !! r) (Gtk.Label r)
+    self.muc.joinMUC r n maxhistory: '20'
+
+  self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
+    self.muc.ourNicks !! p.room != p.nick = None
+    p.type == 'error' = tabs.replace_page (nums !! p.room) $ error_message p
+    p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
 
 wnd.connect 'delete-event' Gtk.main_quit
 wnd.connect 'delete-event' (_ _) -> self.disconnect!
