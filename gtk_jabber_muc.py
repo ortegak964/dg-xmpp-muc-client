@@ -223,30 +223,30 @@ error_message = p -> Gtk.Grid.padded
       entry = Gtk.Entry text: (p.nick + "'")
       retry = Gtk.Button 'Try again'
 
-      retry_f = (w1 w2) ->
-        w1.set_sensitive False
-        w2.set_sensitive False
+      retry_f = _ ->
+        entry.set_sensitive False
+        retry.set_sensitive False
         self.muc.joinMUC p.room entry.props.text maxhistory: '20'
 
-      entry.connect 'activate' (bind retry_f retry)
-      retry.connect 'clicked'  (bind retry_f entry)
+      entry.connect 'activate' retry_f
+      retry.connect 'clicked'  retry_f
 
     p.error == 'not-authorized' = Gtk.Grid.padded entry retry vexpand: False where
       entry = Gtk.Entry visibility: False placeholder_text: 'Know one?'
       retry = Gtk.Button 'Try again'
 
-      retry_f = (w1 w2) ->
-        w1.set_sensitive False
-        w2.set_sensitive False
+      retry_f = _ ->
+        entry.set_sensitive False
+        retry.set_sensitive False
         self.muc.joinMUC p.room p.nick password: entry.props.text maxhistory: '20'
 
-      entry.connect 'activate' (bind retry_f retry)
-      retry.connect 'clicked'  (bind retry_f entry)
+      entry.connect 'activate' retry_f
+      retry.connect 'clicked'  retry_f
 
     True = Gtk.Grid.padded retry vexpand: False where
       retry = Gtk.Button 'Try again'
-      retry.connect 'clicked' w ->
-        w.set_sensitive False
+      retry.connect 'clicked' _ ->
+        retry.set_sensitive False
         self.muc.joinMUC p.room p.nick maxhistory: '20'
 
 
