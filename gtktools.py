@@ -188,6 +188,7 @@ Gtk.TextView.linkifyable = classmethod $ (cls **: k) ->
       # That should be better than `webbrowser.open`, I think.
       # Is this function equivalent to `xdg-open`?
       Gtk.show_uri ev.window.get_screen! t.props.name 0
+    False
 
   # FIXME should also add some items to the popup menu.
   self
