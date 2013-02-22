@@ -1,30 +1,11 @@
 import '/hashlib/md5'
 import '/time/strftime'
-import '/collections/defaultdict'
 
 import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
 import '/gi/repository/Pango'
-import '/gi/repository/GObject'
 
-import 'gtktools/delegate'
-import 'xmpptools/Client'
-
-
-GObject.type_register     (LoginWidgetT = inherit Gtk.Grid ())
-GObject.signal_new 'login' LoginWidgetT GObject.SIGNAL_RUN_LAST GObject.TYPE_NONE $ tuple' object
-
-
-LoginWidget = (username password rooms) -> wnd where
-  wnd = LoginWidgetT!
-  wnd.add $ Gtk.Frame.with loginform label: 'Login' shadow_type: Gtk.ShadowType.ETCHED_IN where
-    jidf = Gtk.Entry text: username placeholder_text: 'Jabber ID'
-    pwdf = Gtk.Entry text: password placeholder_text: 'Password' visibility: False
-    ok   = Gtk.Button 'Login'
-    ok.connect 'clicked' _ ->
-       wnd.emit 'login' $ Client jidf.props.text pwdf.props.text rooms
-    loginform = Gtk.Grid.with jidf pwdf ok orientation: Gtk.Orientation.VERTICAL
-  wnd.show_all!
+import '../gtktools/delegate'
 
 
 MUCWidget = (self room token) -> Gtk.Paned.with
@@ -159,94 +140,3 @@ MUCWidget = (self room token) -> Gtk.Paned.with
       ev.keyval == Gdk.KEY_Return = True where send w.props.buffer
       ev.keyval == Gdk.KEY_Tab    = True where w.props.buffer.autocomplete
         map (+ ', ') $ self.muc.rooms !! room
-
-
-ErrorWidget = (self p) -> Gtk.Grid.padded
-  orientation: Gtk.Orientation.VERTICAL
-
-  Gtk.Label hexpand: True $ switch
-    p.error == 'conflict'              = 'Nickname {.nick} already taken.'.format p
-    p.error == 'forbidden'             = 'Banned.'
-    p.error == 'not-allowed'           = "Couldn't create a new room."
-    p.error == 'item-not-found'        = 'This room is locked.'
-    p.error == 'not-authorized'        = 'Password required.'
-    p.error == 'service-unavailable'   = 'This room is overcrowded.'
-    p.error == 'registration-required' = 'Not a member of this room.'
-    True = 'Unknown error: {.error}.'.format p
-
-  switch
-    p.error == 'conflict' = Gtk.Grid.padded entry retry vexpand: False where
-      entry = Gtk.Entry text: (p.nick + "'")
-      retry = Gtk.Button 'Try again'
-
-      retry_f = _ ->
-        entry.set_sensitive False
-        retry.set_sensitive False
-        self.muc.joinMUC p.room entry.props.text maxhistory: '20'
-
-      entry.connect 'activate' retry_f
-      retry.connect 'clicked'  retry_f
-
-    p.error == 'not-authorized' = Gtk.Grid.padded entry retry vexpand: False where
-      entry = Gtk.Entry visibility: False placeholder_text: 'Know one?'
-      retry = Gtk.Button 'Try again'
-
-      retry_f = _ ->
-        entry.set_sensitive False
-        retry.set_sensitive False
-        self.muc.joinMUC p.room p.nick password: entry.props.text maxhistory: '20'
-
-      entry.connect 'activate' retry_f
-      retry.connect 'clicked'  retry_f
-
-    True = Gtk.Grid.padded retry vexpand: False where
-      retry = Gtk.Button 'Try again'
-      retry.connect 'clicked' _ ->
-        retry.set_sensitive False
-        self.muc.joinMUC p.room p.nick maxhistory: '20'
-
-
-MainWindow = (username password rooms) -> wnd where
-  self = None
-
-  wnd = Gtk.Window.with tabs where
-    tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
-
-    toks = defaultdict list
-    nums = dict!
-    wgts = dict!
-
-    login = LoginWidget username password rooms
-    login.connect 'login' (_ client) ->
-      self = client
-      self.add_event_handler 'join' $ delegate $ (room, nick) -> room in nums or
-        wgts !! room = w = MUCWidget self room $ toks !! room
-        nums !! room = n = tabs.append_page w grid where
-          close = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
-
-          button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
-          button.connect 'clicked' $ _ -> self.event 'leave' room
-
-          grid = Gtk.Grid.with (Gtk.Label room) button
-          grid.show_all!
-
-        self.muc.joinMUC room nick maxhistory: '20'
-
-      self.add_event_handler 'leave' $ delegate $ room -> room in nums and
-        self.muc.leaveMUC room (self.muc.ourNicks !! room)
-        self.dissociate  $ toks.pop room
-        tabs.remove_page $ nums.pop room
-        wgts.pop room
-
-      self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
-        self.muc.ourNicks !! p.room != p.nick = None
-        p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
-        p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
-
-      self.process! if self.connect!
-
-    tabs.append_page login (Gtk.Label '+')
-
-  wnd.connect 'delete-event' Gtk.main_quit
-  wnd.connect 'delete-event' (_ _) -> (self.disconnect! if self)
-  wnd.show_all!

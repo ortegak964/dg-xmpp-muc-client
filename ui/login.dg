@@ -1,0 +1,20 @@
+import '/gi/repository/Gtk'
+import '/gi/repository/GObject'
+
+import '../xmpptools/Client'
+
+
+GObject.type_register     (LoginWidgetT = inherit Gtk.Grid ())
+GObject.signal_new 'login' LoginWidgetT GObject.SIGNAL_RUN_LAST GObject.TYPE_NONE $ tuple' object
+
+
+LoginWidget = (username password rooms) -> wnd where
+  wnd = LoginWidgetT!
+  wnd.add $ Gtk.Frame.with loginform label: 'Login' shadow_type: Gtk.ShadowType.ETCHED_IN where
+    jidf = Gtk.Entry text: username placeholder_text: 'Jabber ID'
+    pwdf = Gtk.Entry text: password placeholder_text: 'Password' visibility: False
+    ok   = Gtk.Button 'Login'
+    ok.connect 'clicked' _ ->
+       wnd.emit 'login' $ Client jidf.props.text pwdf.props.text rooms
+    loginform = Gtk.Grid.with jidf pwdf ok orientation: Gtk.Orientation.VERTICAL
+  wnd.show_all!

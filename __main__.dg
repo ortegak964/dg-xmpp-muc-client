@@ -1,6 +1,6 @@
 import '/gi/repository/Gtk'
 
-import 'uimain/MainWindow'
+import 'ui/main/MainWindow'
 
 wnd = MainWindow 'jid@jabber.org' 'password' $ list'
   'room@conference.jabber.org', 'nick'
