@@ -4,8 +4,9 @@ import '/gi/repository/GObject'
 import '../xmpptools/Client'
 
 
-GObject.type_register     (LoginWidgetT = inherit Gtk.Grid ())
-GObject.signal_new 'login' LoginWidgetT GObject.SIGNAL_RUN_LAST GObject.TYPE_NONE $ tuple' object
+GObject.type_register
+  LoginWidgetT = inherit Gtk.Grid
+    __gsignals__ = dict login: (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, tuple' object)
 
 
 LoginWidget = (username password rooms) -> wnd where
