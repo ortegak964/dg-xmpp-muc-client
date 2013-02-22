@@ -53,6 +53,14 @@ Gtk.Container.padded = classmethod (cls *: others **: k) ->
   self
 
 
+# group :: (str, Widget, **) -> Frame
+#
+# Create a named group frame.
+#
+Gtk.Frame.group = classmethod (cls name widget **: k) ->
+  cls.with widget label: name shadow_type: Gtk.ShadowType.ETCHED_IN **: k
+
+
 # scrollable :: (Widget, **) -> Frame
 #
 # Create a frame with a couple of predefined properties and some scrollbars.
