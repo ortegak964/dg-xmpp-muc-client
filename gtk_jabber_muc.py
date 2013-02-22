@@ -42,6 +42,23 @@ Presence.error  = property $ !! 'condition' <- !! 'error'
 ClientXMPP.muc = property $ !! 'xep_0045' <- `getattr` 'plugin'
 
 
+# associate :: (list, str, * -> a, **) -> ()
+#
+# Subscribe to an event, add info about it to some list.
+#
+ClientXMPP.associate = (self data name f **: k) ->
+  self.add_event_handler name f **: k
+  data.append (name, f)
+
+
+# dissociate :: list -> ()
+#
+# Unsubscribe from all events in a list.
+#
+ClientXMPP.dissociate = (self data) ->
+  for data (name, f) -> (self.del_event_handler name f)
+
+
 ## XMPP init stuff.
 
 self = ClientXMPP XMPP_USER_ID XMPP_PASSWORD
@@ -65,7 +82,7 @@ self.add_event_handler 'groupchat_subject' m ->
 #
 # Create a normal room display.
 #
-make_pane = room -> Gtk.Paned.with
+make_pane = (room token) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Paned.with
@@ -147,10 +164,10 @@ make_pane = room -> Gtk.Paned.with
         buffer.append  ' has set the subject to: ' system
         buffer.linkify x.subject system
 
-      self.add_event_handler ('muc::{}::subject'.format     room) $ delegate subject
-      self.add_event_handler ('muc::{}::message'.format     room) $ delegate message
-      self.add_event_handler ('muc::{}::got_online'.format  room) $ delegate joined
-      self.add_event_handler ('muc::{}::got_offline'.format room) $ delegate left
+      self.associate token ('muc::{}::subject'.format     room) $ delegate subject
+      self.associate token ('muc::{}::message'.format     room) $ delegate message
+      self.associate token ('muc::{}::got_online'.format  room) $ delegate joined
+      self.associate token ('muc::{}::got_offline'.format room) $ delegate left
 
     Gtk.Frame.scrollable roster vexpand: True where
 
@@ -168,7 +185,7 @@ make_pane = room -> Gtk.Paned.with
         model = Gtk.ListStore str str
         model.set_sort_column_id 0 Gtk.SortType.ASCENDING
 
-        self.add_event_handler ('muc::{}::presence'.format room) $ delegate p ->
+        self.associate token ('muc::{}::presence'.format room) $ delegate p ->
           # 1. Remove the old entry.
           for (model.find p.nick 0) (model !!~)
           # 2. Add the same entry.
@@ -250,6 +267,18 @@ error_message = p -> Gtk.Grid.padded
         self.muc.joinMUC p.room p.nick maxhistory: '20'
 
 
+tab_label = (tabs room wgts nums token) -> Gtk.Grid.with (Gtk.Label room) close where
+  close = Gtk.Button.with focus_on_click: False relief: Gtk.ReliefStyle.NONE
+    Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
+
+  close.connect 'clicked' _ ->
+    self.muc.leaveMUC room (self.muc.ourNicks !! room)
+    self.dissociate token
+    tabs.remove_page $ nums !! room
+    nums !!~ room
+    wgts !!~ room
+  
+
 wnd = Gtk.Window.with tabs where
   tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
   nums = dict!
@@ -263,9 +292,11 @@ wnd = Gtk.Window.with tabs where
     #  Also, it should be created *before* calling `joinMUC` as
     #  it connects to various signals that may otherwise be ignored.
     #  It's never a good thing when a half of the roster is missing.
-    wgts !! r = make_pane r
-    nums !! r = tabs.append_page (wgts !! r) (Gtk.Label r)
-    self.muc.joinMUC r n maxhistory: '20'
+    r in nums or
+      wgts !! r = make_pane r (token = list!)
+      nums !! r = tabs.append_page (wgts !! r) $ tab_label tabs r wgts nums token
+      (tabs.get_tab_label (wgts !! r)).show_all!
+      self.muc.joinMUC r n maxhistory: '20'
 
   self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
     self.muc.ourNicks !! p.room != p.nick = None
