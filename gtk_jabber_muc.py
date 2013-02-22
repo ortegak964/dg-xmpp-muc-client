@@ -267,35 +267,28 @@ error_message = p -> Gtk.Grid.padded
         self.muc.joinMUC p.room p.nick maxhistory: '20'
 
 
-tab_label = (tabs room wgts nums token) -> Gtk.Grid.with (Gtk.Label room) close where
-  close = Gtk.Button.with focus_on_click: False relief: Gtk.ReliefStyle.NONE
-    Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
-
-  close.connect 'clicked' _ ->
-    self.muc.leaveMUC room (self.muc.ourNicks !! room)
-    self.dissociate token
-    tabs.remove_page $ nums !! room
-    nums !!~ room
-    wgts !!~ room
-  
-
 wnd = Gtk.Window.with tabs where
   tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
   nums = dict!
   wgts = dict!
 
   self.add_event_handler 'session_start' $ delegate $ _ -> for XMPP_MUC_ROOMS (r, n) ->
-    # NOTE `make_pane` should be called once per room, then reused.
-    #  Attempting to remove it will result in a memory leak since
-    #  `self` keeps references to event handlers and all their closures.
-    #
-    #  Also, it should be created *before* calling `joinMUC` as
-    #  it connects to various signals that may otherwise be ignored.
-    #  It's never a good thing when a half of the roster is missing.
     r in nums or
       wgts !! r = make_pane r (token = list!)
-      nums !! r = tabs.append_page (wgts !! r) $ tab_label tabs r wgts nums token
-      (tabs.get_tab_label (wgts !! r)).show_all!
+      nums !! r = tabs.append_page (wgts !! r) grid where
+        close = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
+
+        button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
+        button.connect 'clicked' _ ->
+          self.muc.leaveMUC r (self.muc.ourNicks !! r)
+          self.dissociate token
+          tabs.remove_page $ nums !! r
+          nums !!~ r
+          wgts !!~ r
+
+        grid = Gtk.Grid.with (Gtk.Label r) button
+        grid.show_all!
+
       self.muc.joinMUC r n maxhistory: '20'
 
   self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
