@@ -20,6 +20,7 @@ MainWindow = (username password rooms) -> wnd where
     wgts = dict!
 
     login = LoginWidget username password rooms
+    login.show_all!
     login.connect 'login' (_ client) ->
       self = client
       self.add_event_handler 'join' $ delegate $ (room, nick) -> room in nums or
