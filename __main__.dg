@@ -1,41 +1,8 @@
 import '/gi/repository/Gtk'
-import '/sleekxmpp/ClientXMPP'
 
-import 'xmpptools'
 import 'uimain/MainWindow'
 
+wnd = MainWindow 'jid@jabber.org' 'password' $ list'
+  'room@conference.jabber.org', 'nick'
 
-## Config.
-
-XMPP_USER_ID   = 'jid@example.com'
-XMPP_PASSWORD  = 'password'
-XMPP_MUC_ROOMS = list'
-  'room@conference.example.com', 'nick'
-
-
-## XMPP init stuff.
-
-self = ClientXMPP XMPP_USER_ID XMPP_PASSWORD
-self.register_plugin 'xep_0030'
-self.register_plugin 'xep_0045'
-self.register_plugin 'xep_0199'
-#self.register_plugin 'xep_0048' $ dict auto_join: True storage_method: 'xep_0223'
-
-self.add_event_handler 'session_start' _ ->
-  self.get_roster!
-  self.send_presence!
-  for XMPP_MUC_ROOMS $ bind self.event 'join'
-
-self.add_event_handler 'groupchat_subject' m ->
-  # FIXME this should probably be sent as a pull request to SleekXMPP.
-  self.event ('muc::{}::subject'.format (m !! 'from').bare) m
-
-
-## Profit.
-
-wnd = MainWindow self
-wnd.connect 'delete-event' (_ _) -> self.disconnect!
-wnd.connect 'delete-event' Gtk.main_quit
-wnd.show_all!
-self.process! if self.connect!
 Gtk.main!
