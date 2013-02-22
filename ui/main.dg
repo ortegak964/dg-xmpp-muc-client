@@ -19,9 +19,7 @@ MainWindow = (username password rooms) -> wnd where
     nums = dict!
     wgts = dict!
 
-    login = LoginWidget username password rooms
-    login.show_all!
-    login.connect 'login' (_ client) ->
+    login = LoginWidget username password rooms client ->
       self = client
       self.add_event_handler 'join' $ delegate $ (room, nick) -> room in nums or
         wgts !! room = w = MUCWidget self room $ toks !! room
@@ -50,6 +48,7 @@ MainWindow = (username password rooms) -> wnd where
       self.process! if self.connect!
 
     tabs.append_page login (Gtk.Label '+')
+    login.show_all!
 
   wnd.connect 'delete-event' Gtk.main_quit
   wnd.connect 'delete-event' (_ _) -> (self.disconnect! if self)
