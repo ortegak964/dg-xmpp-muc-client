@@ -1,88 +1,15 @@
 import '/hashlib/md5'
 import '/time/strftime'
+import '/collections/defaultdict'
 
 import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
 import '/gi/repository/Pango'
 
-import '/sleekxmpp/Message'
-import '/sleekxmpp/Presence'
-import '/sleekxmpp/ClientXMPP'
-
-import '/gtktools/delegate'
+import 'gtktools/delegate'
 
 
-## Config.
-
-XMPP_USER_ID   = 'jid@example.com'
-XMPP_PASSWORD  = 'password'
-XMPP_MUC_ROOMS = list'
-  'room@conference.example.com', 'nick'
-
-
-## SleekXMPP extensions.
-
-# _ :: a
-#
-# Aliases for various stanza fields.
-#
-Message.body    = property $ !! 'body'
-Message.nick    = property $ !! 'mucnick'
-Message.subject = property $ !! 'subject'
-Presence.type   = property $ !! 'type'
-Presence.nick   = property $ !! 'nick' <- !! 'muc'
-Presence.room   = property $ !! 'room' <- !! 'muc'
-Presence.error  = property $ !! 'condition' <- !! 'error'
-
-
-# muc :: XEP_0045
-#
-# Alias for `self.plugin !! 'xep_0045'`.
-#
-ClientXMPP.muc = property $ !! 'xep_0045' <- `getattr` 'plugin'
-
-
-# associate :: (list, str, * -> a, **) -> ()
-#
-# Subscribe to an event, add info about it to some list.
-#
-ClientXMPP.associate = (self data name f **: k) ->
-  self.add_event_handler name f **: k
-  data.append (name, f)
-
-
-# dissociate :: list -> ()
-#
-# Unsubscribe from all events in a list.
-#
-ClientXMPP.dissociate = (self data) ->
-  for data (name, f) -> (self.del_event_handler name f)
-
-
-## XMPP init stuff.
-
-self = ClientXMPP XMPP_USER_ID XMPP_PASSWORD
-self.register_plugin 'xep_0030'
-self.register_plugin 'xep_0045'
-self.register_plugin 'xep_0199'
-#self.register_plugin 'xep_0048' $ dict auto_join: True storage_method: 'xep_0223'
-
-self.add_event_handler 'session_start' _ ->
-  self.get_roster!
-  self.send_presence!
-
-self.add_event_handler 'groupchat_subject' m ->
-  # FIXME this should probably be sent as a pull request to SleekXMPP.
-  self.event ('muc::{}::subject'.format (m !! 'from').bare) m
-
-
-## UI init stuff.
-
-# make_pane :: str -> Widget
-#
-# Create a normal room display.
-#
-make_pane = (room token) -> Gtk.Paned.with
+MUCWidget = (self room token) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Paned.with
@@ -216,13 +143,7 @@ make_pane = (room token) -> Gtk.Paned.with
         map (+ ', ') $ self.muc.rooms !! room
 
 
-# error_message :: Presence -> Widget
-#
-# Create an exceptional case handling UI.
-#
-# FIXME it's awful.
-#
-error_message = p -> Gtk.Grid.padded
+ErrorWidget = (self p) -> Gtk.Grid.padded
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Label hexpand: True $ switch
@@ -267,40 +188,32 @@ error_message = p -> Gtk.Grid.padded
         self.muc.joinMUC p.room p.nick maxhistory: '20'
 
 
-wnd = Gtk.Window.with tabs where
+MainWindow = self -> Gtk.Window.with tabs where
   tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
+  toks = defaultdict list
   nums = dict!
   wgts = dict!
 
-  self.add_event_handler 'session_start' $ delegate $ _ -> for XMPP_MUC_ROOMS (r, n) ->
-    r in nums or
-      wgts !! r = make_pane r (token = list!)
-      nums !! r = tabs.append_page (wgts !! r) grid where
-        close = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
+  self.add_event_handler 'join' $ delegate $ (room, nick) -> room in nums or
+    wgts !! room = w = MUCWidget self room $ toks !! room
+    nums !! room = n = tabs.append_page w grid where
+      close = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
 
-        button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
-        button.connect 'clicked' _ ->
-          self.muc.leaveMUC r (self.muc.ourNicks !! r)
-          self.dissociate token
-          tabs.remove_page $ nums !! r
-          nums !!~ r
-          wgts !!~ r
+      button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
+      button.connect 'clicked' $ _ -> self.event 'leave' room
 
-        grid = Gtk.Grid.with (Gtk.Label r) button
-        grid.show_all!
+      grid = Gtk.Grid.with (Gtk.Label room) button
+      grid.show_all!
 
-      self.muc.joinMUC r n maxhistory: '20'
+    self.muc.joinMUC room nick maxhistory: '20'
+
+  self.add_event_handler 'leave' $ delegate $ room -> room in nums and
+    self.muc.leaveMUC room (self.muc.ourNicks !! room)
+    self.dissociate  $ toks.pop room
+    tabs.remove_page $ nums.pop room
+    wgts.pop room
 
   self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
     self.muc.ourNicks !! p.room != p.nick = None
-    p.type == 'error' = tabs.replace_page (nums !! p.room) $ error_message p
+    p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
     p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
-
-wnd.connect 'delete-event' Gtk.main_quit
-wnd.connect 'delete-event' (_ _) -> self.disconnect!
-wnd.show_all!
-
-## Profit.
-
-self.process! if self.connect!
-Gtk.main!
