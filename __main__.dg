@@ -2,7 +2,7 @@ import '/gi/repository/Gtk'
 
 import 'ui/main/MainWindow'
 
-wnd = MainWindow 'jid@jabber.org' 'password' $ list'
-  'room@conference.jabber.org', 'nick'
+wnd = MainWindow 'jid@example.com' 'password' $ list'
+  'room@conference.example.com', 'nick', 'password or None'
 
 Gtk.main!

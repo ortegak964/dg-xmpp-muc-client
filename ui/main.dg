@@ -19,33 +19,33 @@ MainWindow = (username password rooms) -> wnd where
     nums = dict!
     wgts = dict!
 
-    login = LoginWidget username password rooms client ->
-      self = client
-      self.add_event_handler 'join' $ delegate $ (room, nick) -> room in nums or
+    login = LoginWidget username password rooms
+      client ->
+        self = client
+        self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
+          self.muc.ourNicks !! p.room != p.nick = None
+          p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
+          p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
+
+        self.process! if self.connect!
+
+      (room nick pwd) -> room in nums or
         wgts !! room = w = MUCWidget self room $ toks !! room
         nums !! room = n = tabs.append_page w grid where
           close = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
 
           button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
-          button.connect 'clicked' $ _ -> self.event 'leave' room
+          button.connect 'clicked' $ _ ->
+            self.muc.leaveMUC room (self.muc.ourNicks !! room)
+            self.dissociate  $ toks.pop room
+            tabs.remove_page $ nums.pop room
+            wgts.pop room
 
           grid = Gtk.Grid.with (Gtk.Label room) button
           grid.show_all!
 
-        self.muc.joinMUC room nick maxhistory: '20'
-
-      self.add_event_handler 'leave' $ delegate $ room -> room in nums and
-        self.muc.leaveMUC room (self.muc.ourNicks !! room)
-        self.dissociate  $ toks.pop room
-        tabs.remove_page $ nums.pop room
-        wgts.pop room
-
-      self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
-        self.muc.ourNicks !! p.room != p.nick = None
-        p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
-        p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
-
-      self.process! if self.connect!
+        tabs.set_current_page $ nums !! room
+        self.muc.joinMUC room nick password: pwd maxhistory: '20'
 
     tabs.append_page login (Gtk.Label '+')
     login.show_all!

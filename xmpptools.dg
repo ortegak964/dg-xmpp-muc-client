@@ -38,22 +38,3 @@ ClientXMPP.associate = (self data name f **: k) ->
 #
 ClientXMPP.dissociate = (self data) ->
   for data (name, f) -> (self.del_event_handler name f)
-
-
-# Client :: (str, str) -> ClientXMPP
-#
-# An extended `ClientXMPP` constructor.
-#
-Client = (username password rooms) -> self where
-  self = ClientXMPP username password
-  self.register_plugin 'xep_0030'
-  self.register_plugin 'xep_0045'
-  self.register_plugin 'xep_0199'
-
-  self.add_event_handler 'session_start' _ ->
-    self.get_roster!
-    self.send_presence!
-    for rooms $ bind self.event 'join'
-
-  self.add_event_handler 'groupchat_subject' m ->
-    self.event ('muc::{}::subject'.format (m !! 'from').bare) m
