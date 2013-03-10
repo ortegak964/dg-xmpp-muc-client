@@ -5,10 +5,10 @@ import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
 import '/gi/repository/Pango'
 
-import '../gtktools/delegate'
+import '../gtktools/wsignals'
 
 
-MUCWidget = (self room token) -> Gtk.Paned.with
+MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Paned.with
@@ -51,18 +51,28 @@ MUCWidget = (self room token) -> Gtk.Paned.with
         ':-|', 'face-plain'
         ':<',  'face-worried'
 
-      joined = x ->
-        buffer.append (strftime '\n%H:%M:%S +') time
-        buffer.append x.nick $ ntag x.nick
+      online = set!
 
-      left = x ->
-        buffer.append (strftime '\n%H:%M:%S −') time
-        buffer.append x.nick $ ntag x.nick
+      presence.append $ x -> switch
+        x.type == 'unavailable' =
+          buffer.append (strftime '\n%H:%M:%S −') time
+          buffer.append x.nick $ ntag x.nick
 
-      message = x ->
+        not (x.nick in online) =
+          buffer.append (strftime '\n%H:%M:%S +') time
+          buffer.append x.nick $ ntag x.nick
+          online.add x.nick
+
+      message.append x ->
         x.time = strftime '\n%H:%M:%S '
 
         switch
+          x.subject =
+            buffer.append  x.time time
+            buffer.append  x.nick system
+            buffer.append  ' has set the subject to: ' system
+            buffer.linkify x.subject system
+
           x.nick == '' =  # Server-issued message.
             buffer.append  x.time time
             buffer.linkify x.body system
@@ -84,17 +94,6 @@ MUCWidget = (self room token) -> Gtk.Paned.with
             buffer.append  ': '     time
             buffer.linkify x.body   text
 
-      subject = x ->
-        buffer.append (strftime '\n%H:%M:%S ') time
-        buffer.append  x.nick system
-        buffer.append  ' has set the subject to: ' system
-        buffer.linkify x.subject system
-
-      self.associate token ('muc::{}::subject'.format     room) $ delegate subject
-      self.associate token ('muc::{}::message'.format     room) $ delegate message
-      self.associate token ('muc::{}::got_online'.format  room) $ delegate joined
-      self.associate token ('muc::{}::got_offline'.format room) $ delegate left
-
     Gtk.Frame.scrollable roster vexpand: True where
 
       roster = Gtk.TreeView model where
@@ -111,14 +110,12 @@ MUCWidget = (self room token) -> Gtk.Paned.with
         model = Gtk.ListStore str str
         model.set_sort_column_id 0 Gtk.SortType.ASCENDING
 
-        self.associate token ('muc::{}::presence'.format room) $ delegate p ->
+        presence.append p ->
           # 1. Remove the old entry.
           for (model.find p.nick 0) (model !!~)
           # 2. Add the same entry.
           #    (Easier than checking if there's already one.)
           model.append (p.nick, status p.type) if p.type != 'unavailable'
-          # 3. ???????
-          # 4. False. (Wait, no, `delegate` will return `False` anyway.)
 
       roster.set_headers_visible False
       roster.append_column $ Gtk.TreeViewColumn '' Gtk.CellRendererPixbuf! icon_name: 1

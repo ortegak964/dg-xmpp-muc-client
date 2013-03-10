@@ -25,9 +25,6 @@ LoginWidget = (username password rooms onlogin onjoin) -> Gtk.Grid.with
         self.send_presence!
         for rooms (room, nick, pwd) -> (onjoin room nick pwd)
 
-      self.add_event_handler 'groupchat_subject' m ->
-        self.event ('muc::{}::subject'.format (m !! 'from').bare) m
-
   Gtk.Frame.group 'Join a room' form where
     name = Gtk.Entry placeholder_text: 'room@server'
     nick = Gtk.Entry placeholder_text: 'Nickname'
