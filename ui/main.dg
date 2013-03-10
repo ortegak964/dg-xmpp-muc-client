@@ -52,14 +52,13 @@ MainWindow = (username password rooms) -> wnd where
 
         self.add_event_handler 'presence' $ delegate $ p -> switch
           p.from in wgts = (wgts !! p.from).presence p
-          p.room in wgts =
-            (wgts !! p.room).presence p
-            switch
-              self.muc.ourNicks !! p.room != p.nick = None
-              p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
-              p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
-
+          p.room in wgts = (wgts !! p.room).presence p
           p.room in self.muc.ourNicks = add_page MUCWidget p.room leave_muc p
+
+        self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
+          self.muc.ourNicks !! p.room != p.nick = None
+          p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
+          p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
 
         self.process! if self.connect!
 
