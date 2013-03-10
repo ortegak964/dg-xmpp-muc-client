@@ -218,4 +218,18 @@ Gtk.TreeModel.find = (self x n) ->
 #
 delegate = f -> bind GObject.idle_add ((_ -> False) <- f)
 
+
+Signal = inherit list $
+  __call__ = (self *: a **: k) -> exhaust $ map f -> (f *: a **: k) self
+
+# wsignals :: (* -> Object) -> Object
+#
+# Add some attributes that, when called, delegate to callbacks from the list.
+#
+wsignals = f -> obj where
+  names = f.__code__.co_varnames !! slice None f.__code__.co_argcount
+  datas = list $ map _ -> Signal! names
+  obj = f *: datas
+  exhaust $ map (bind setattr obj) names datas
+
 GObject.threads_init!
