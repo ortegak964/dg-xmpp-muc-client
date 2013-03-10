@@ -31,7 +31,7 @@ MainWindow = (username password rooms) -> wnd where
       nums !! target = n = tabs.append_page w $ TabLabel self (str target) _ ->
         onquit target
         tabs.remove_page $ nums.pop target
-        nums.pop target
+        wgts.pop target
 
       w.show_all!
       tabs.set_current_page n
@@ -39,34 +39,29 @@ MainWindow = (username password rooms) -> wnd where
     leave_muc = room ->
       self.muc.leaveMUC room (self.muc.ourNicks !! room)
 
-    login = LoginWidget username password rooms
-      client ->
-        self = client
-        self.add_event_handler 'message' $ delegate $ m -> switch
-          m.to   in wgts = (wgts !! m.to  ).message m
-          m.from in wgts = (wgts !! m.from).message m
-          m.room in wgts = (wgts !! m.room).message m
-          m.type == 'groupchat' = add_page MUCWidget m.room leave_muc m
-          m.type == 'chat'      = add_page ChatWidget m.from _ -> _ m
-          m.type == 'normal'    = add_page ChatWidget m.from _ -> _ m
+    login = LoginWidget username password rooms client ->
+      self = client
+      self.add_event_handler 'message' $ delegate $ m -> switch
+        m.from in wgts = (wgts !! m.from).message m
+        m.room in wgts = (wgts !! m.room).message m
+        m.type == 'groupchat' = add_page MUCWidget m.room leave_muc m
+        m.type == 'chat'      = add_page ChatWidget m.from _ -> _ m
+        m.type == 'normal'    = add_page ChatWidget m.from _ -> _ m
 
-        self.add_event_handler 'presence' $ delegate $ p -> switch
-          p.from in wgts = (wgts !! p.from).presence p
-          p.room in wgts = (wgts !! p.room).presence p
-          p.room in self.muc.ourNicks = add_page MUCWidget p.room leave_muc p
+      self.add_event_handler 'presence' $ delegate $ p -> switch
+        p.from in wgts = (wgts !! p.from).presence p
+        p.room in wgts = (wgts !! p.room).presence p
+        p.room in self.muc.ourNicks = add_page MUCWidget p.room leave_muc p
 
-        self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
-          self.muc.ourNicks !! p.room != p.nick = None
-          p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
-          p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
+      self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
+        self.muc.ourNicks !! p.room != p.nick = None
+        p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
+        p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
 
-        self.process! if self.connect!
+      self.process! if self.connect!
 
-      (room nick pwd) ->
-        self.muc.joinMUC room nick password: pwd maxhistory: '20'
-
-    #tabs.append_page login (Gtk.Label '+')
-    #login.show_all!
+    tabs.append_page login (Gtk.Label '+')
+    login.show_all!
 
   wnd.connect 'delete-event' Gtk.main_quit
   wnd.connect 'delete-event' (_ _) -> (self.disconnect! if self)

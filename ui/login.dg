@@ -6,7 +6,7 @@ import '../gtktools/delegate'
 import '../xmpptools'
 
 
-LoginWidget = (username password rooms onlogin onjoin) -> Gtk.Grid.with
+LoginWidget = (username password rooms onlogin self: None) -> Gtk.Grid.with
 
   Gtk.Frame.group 'Login' form where
     jidf = Gtk.Entry text: username placeholder_text: 'Jabber ID'
@@ -23,7 +23,7 @@ LoginWidget = (username password rooms onlogin onjoin) -> Gtk.Grid.with
       self.add_event_handler 'session_start' $ delegate _ ->
         self.get_roster!
         self.send_presence!
-        for rooms (room, nick, pwd) -> (onjoin room nick pwd)
+        for rooms (room, nick, pwd) -> (self.muc.joinMUC room nick password: pwd maxhistory: '20')
 
   Gtk.Frame.group 'Join a room' form where
     name = Gtk.Entry placeholder_text: 'room@server'
@@ -31,7 +31,7 @@ LoginWidget = (username password rooms onlogin onjoin) -> Gtk.Grid.with
     pwd  = Gtk.Entry placeholder_text: 'Password' visibility: False
     ok   = Gtk.Button 'Join'
 
-    join = _ -> onjoin name.props.text nick.props.text pwd.props.text
+    join = _ -> self.muc.joinMUC name.props.text nick.props.text password: pwd.props.text maxhistory: '20'
     name.connect 'activate' join
     nick.connect 'activate' join
     pwd.connect  'activate' join
