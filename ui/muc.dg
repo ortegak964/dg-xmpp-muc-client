@@ -57,6 +57,7 @@ MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned
         x.type == 'unavailable' =
           buffer.append (strftime '\n%H:%M:%S −') time
           buffer.append x.nick $ ntag x.nick
+          online.remove x.nick
 
         not (x.nick in online) =
           buffer.append (strftime '\n%H:%M:%S +') time
