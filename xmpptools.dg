@@ -1,3 +1,4 @@
+import '/sleekxmpp/StanzaBase'
 import '/sleekxmpp/Message'
 import '/sleekxmpp/Presence'
 import '/sleekxmpp/ClientXMPP'
@@ -7,8 +8,12 @@ import '/sleekxmpp/ClientXMPP'
 #
 # Aliases for various stanza fields.
 #
+StanzaBase.from = property $ !! 'from'
+StanzaBase.to   = property $ !! 'to'
+StanzaBase.type = property $ !! 'type'
 Message.body    = property $ !! 'body'
 Message.nick    = property $ !! 'mucnick'
+Message.room    = property $ !! 'mucroom'
 Message.subject = property $ !! 'subject'
 Presence.type   = property $ !! 'type'
 Presence.nick   = property $ !! 'nick' <- !! 'muc'
