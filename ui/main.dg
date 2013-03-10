@@ -8,14 +8,6 @@ import 'login/LoginWidget'
 import 'error/ErrorWidget'
 
 
-TabLabel = (self text callback) -> grid where
-  close  = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
-  button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
-  button.connect 'clicked' $ callback
-  grid = Gtk.Grid.with (Gtk.Label text) button
-  grid.show_all!
-
-
 MainWindow = (username password rooms) -> wnd where
   self = None
 
@@ -23,15 +15,24 @@ MainWindow = (username password rooms) -> wnd where
     tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
     tabs.set_scrollable True
 
-    nums = dict!
+    nums = list' None
     wgts = dict!
 
     add_page = (Type target onquit source) ->
       wgts !! target = w = Type self target source
-      nums !! target = n = tabs.append_page w $ TabLabel self (str target) _ ->
-        onquit target
-        tabs.remove_page $ nums.pop target
-        wgts.pop target
+
+      nums.append target
+      n = tabs.append_page w grid where
+        close  = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
+        button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
+        button.connect 'clicked' _ ->
+          onquit target
+          tabs.remove_page $ nums.index target
+          nums !!~ nums.index target
+          wgts.pop target
+
+        grid = Gtk.Grid.with (Gtk.Label $ str target) button
+        grid.show_all!
 
       w.show_all!
       tabs.set_current_page n
@@ -55,8 +56,8 @@ MainWindow = (username password rooms) -> wnd where
 
       self.add_event_handler 'groupchat_presence' $ delegate $ p -> switch
         self.muc.ourNicks !! p.room != p.nick = None
-        p.type == 'error' = tabs.replace_page (nums !! p.room) $ ErrorWidget self p
-        p.type != 'error' = tabs.replace_page (nums !! p.room) $ wgts !! p.room
+        p.type == 'error' = tabs.replace_page (nums.index p.room) $ ErrorWidget self p
+        p.type != 'error' = tabs.replace_page (nums.index p.room) $ wgts !! p.room
 
       self.process! if self.connect!
 
