@@ -1,4 +1,5 @@
 import '/gi/repository/Gtk'
+import '/sleekxmpp/Message'
 
 import '../gtktools/delegate'
 
@@ -18,7 +19,8 @@ MainWindow = (username password rooms) -> wnd where
     wgts = dict!
 
     add_page = (Type target onquit source) ->
-      wgts !! target = w = Type self target source
+      wgts !! target = w = Type self target
+      w.message source if source :: Message else w.presence source
 
       nums.append target
       n = tabs.append_page w grid where

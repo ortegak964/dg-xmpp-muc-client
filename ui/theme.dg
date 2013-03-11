@@ -1,0 +1,148 @@
+import '/hashlib/md5'
+import '/time/strftime'
+
+import '/gi/repository/Gtk'
+import '/gi/repository/Pango'
+
+
+# colorify :: str -> str
+#
+# Generate a preudorandom color given a seed string.
+# Luminance of that color is capped at 0.5.
+#
+colorify = x ->
+  r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
+  m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
+  '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (bind max 0 <- round m +) (r, g, b))
+
+
+TextBuffer = inherit Gtk.TextBuffer $
+  __init__ = (self *: a **: k) ->
+    super!.__init__ *: a **: k
+
+    # time     -- the tag used to display timestamps
+    # highlight -- the tag used to display timestamps of highlighted messages
+    self.time      = self.tag foreground: '#777777'
+    self.highlight = self.tag foreground: '#990011'
+
+    # text   -- normal message text
+    # system -- server-issued message text
+    self.text   = self.tag foreground: '#333333'
+    self.system = self.tag foreground: '#dd4400' style:  Pango.Style.ITALIC
+
+    # send -- outgoing message prefix color
+    # recv -- incoming message prefix color
+    self.send = self.tag foreground: '#ff6600' weight: Pango.Weight.BOLD
+    self.recv = self.tag foreground: '#0066ff' weight: Pango.Weight.BOLD
+
+    # senM -- outgoing "/me"-message color
+    # recM -- incoming "/me"-message color
+    self.senM = self.tag foreground: '#ff6600' style: Pango.Style.ITALIC
+    self.recM = self.tag foreground: '#0066ff' style: Pango.Style.ITALIC
+
+    # ntag -- get a tag for a given MUC nickname
+    # mtag -- get a tag for a given MUC nickname to display a "/me"-message with
+    self.ntag = n -> self.tag ('n#' + n) foreground: (colorify n) weight: Pango.Weight.BOLD
+    self.mtag = n -> self.tag ('m#' + n) foreground: (colorify n) style:  Pango.Style.ITALIC
+
+    self.emotes = dict'
+      ':)',  'face-smile'
+      ':-)', 'face-smile'
+      ':D',  'face-laugh'
+      ':-D', 'face-laugh'
+      ':(',  'face-sad'
+      ':-(', 'face-sad'
+      ":'(", 'face-crying'
+      ':|',  'face-plain'
+      ':-|', 'face-plain'
+      ':<',  'face-worried'
+
+    None
+
+  # append_time :: bool -> IO ()
+  #
+  # Start a new line beginning with a timestamp.
+  #
+  append_time = (self highlight) ->
+    self.append (strftime '\n%H:%M:%S ') (self.highlight if highlight else self.time)
+
+  # append_chat_message :: (str, bool) -> IO ()
+  #
+  # Handle a message of type 'chat' or 'normal'.
+  #
+  append_chat_message = (self body outgoing) -> switch
+    body.startswith '/me ' =
+      self.append_time False
+      self.linkify ('* ' + body !! slice 4 None) (self.senM if outgoing else self.recM)
+
+    True =
+      self.append_time False
+      self.append ('→' if outgoing else '←') (self.send if outgoing else self.recv)
+      self.linkify body self.text
+
+  # append_muc_message :: (str, str, str, bool) -> IO ()
+  #
+  # Handle a message of type 'groupchat'.
+  #
+  append_muc_message = (self body nick subject highlight) -> switch
+    subject =
+      self.append_time False
+      self.append  nick                        self.system
+      self.append  ' has set the subject to: ' self.system
+      self.linkify subject                     self.system
+
+    nick == '' =
+      self.append_time highlight
+      self.linkify body self.system
+
+    body.startswith '/me ' =
+      self.append_time highlight
+      self.append  (nick + ' ')           $ mtag nick
+      self.linkify (body !! slice 4 None) $ mtag nick
+
+    True =
+      self.append_time highlight
+      self.append  nick $ self.ntag nick
+      self.append  ': '   self.time
+      self.linkify body   self.text
+
+  # append_muc_online :: str -> IO ()
+  #
+  # Show that someone has entered the room.
+  #
+  append_muc_online = (self nick) ->
+    self.append_time False
+    self.append '+'    self.time
+    self.append nick $ self.ntag nick
+
+  # append_muc_offline :: str -> IO ()
+  #
+  # Show that someone has left the room.
+  #
+  append_muc_offline = (self nick) ->
+    self.append_time False
+    self.append '−'    self.time
+    self.append nick $ self.ntag nick
+
+  # append_muc_error :: (str, str) -> IO ()
+  #
+  # Show that something has gone wrong.
+  #
+  append_muc_error = (self error nick) ->
+    self.append_time False
+    self.append '*** ' self.time
+    self.append (self.muc_error_message error nick) self.system
+
+  # muc_error_message :: (str, str) -> str
+  #
+  # Generate an error message for a presence of type "error".
+  #
+  muc_error_message = (self error nick) -> switch
+    error == 'conflict'              = 'Nickname {} already taken, enter a new one.'.format nick
+    error == 'forbidden'             = 'You are banned from this room.'
+    error == 'not-allowed'           = "Couldn't create a new room."
+    error == 'item-not-found'        = 'This room is locked.'
+    error == 'not-authorized'        = 'Password required. Know one?'
+    error == 'service-unavailable'   = 'This room is overcrowded.'
+    error == 'registration-required' = 'Not a member of this room.'
+    True = 'Unknown error: {}.'.format error

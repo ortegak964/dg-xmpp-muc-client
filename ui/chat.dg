@@ -1,61 +1,25 @@
-import '/time/strftime'
-
 import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
-import '/gi/repository/Pango'
 
+import 'theme/TextBuffer'
 import '../gtktools/wsignals'
 
 
-ChatWidget = (self target initmsg) -> wsignals $ (message presence) -> Gtk.Paned.with
+ChatWidget = (self target) -> wsignals $ (message presence) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Frame.scrollable view hexpand: True vexpand: True auto_rewind: True where
-    view = Gtk.TextView.linkifyable
+    buffer = TextBuffer!
+    view   = Gtk.TextView.linkifyable
       editable:       False
       cursor_visible: False
+      buffer:         buffer
       wrap_mode:      Gtk.WrapMode.WORD
 
-    buffer = view.props.buffer
-    time = buffer.tag foreground: '#777777'
-    text = buffer.tag foreground: '#333333'
-    send = buffer.tag foreground: '#ff6600' weight: Pango.Weight.BOLD
-    recv = buffer.tag foreground: '#0066ff' weight: Pango.Weight.BOLD
-    senM = buffer.tag foreground: '#ff6600' style: Pango.Style.ITALIC
-    recM = buffer.tag foreground: '#0066ff' style: Pango.Style.ITALIC
-
-    buffer.emotes = dict'
-      ':)',  'face-smile'
-      ':-)', 'face-smile'
-      ':D',  'face-laugh'
-      ':-D', 'face-laugh'
-      ':(',  'face-sad'
-      ':-(', 'face-sad'
-      ":'(", 'face-crying'
-      ':|',  'face-plain'
-      ':-|', 'face-plain'
-      ':<',  'face-worried'
-
-    message.append $ x -> x.type == 'normal' and (str x.to == target or str x.from == target) and
-      ismine = str x.to == target
-      buffer.append (strftime '\n%H:%M:%S ') time
-
-      switch
-        x.body.startswith '/me ' =
-          buffer.append  '*'                      (senM if ismine else recM)
-          buffer.linkify (x.body !! slice 4 None) (senM if ismine else recM)
-
-        True =
-          buffer.append  ('→ ' if ismine else '← ') (send if ismine else recv)
-          buffer.linkify x.body text
-
-    message initmsg
+    message.append x ->
+      buffer.append_chat_message x.body (x.to == target)
 
   Gtk.Frame.scrollable entry hexpand: True where
-    # send :: TextBuffer -> bool
-    #
-    # Send a message to the active room, return True.
-    #
     send = b -> b.set_text '' where
       msg = self.make_message target b.props.text mtype: 'normal'
       msg.send!

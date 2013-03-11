@@ -1,16 +1,11 @@
-import '/hashlib/md5'
-import '/time/strftime'
-
 import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
-import '/gi/repository/Pango'
 
-import '/sleekxmpp/Presence'
-
+import 'theme/TextBuffer'
 import '../gtktools/wsignals'
 
 
-MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned.with
+MUCWidget = (self room) -> wsignals $ (message presence) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Paned.with
@@ -18,96 +13,29 @@ MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned
     vexpand: True
 
     Gtk.Frame.scrollable view hexpand: True vexpand: True auto_rewind: True where
-      # colorify :: str -> str
-      #
-      # Generate a preudorandom color given a seed string.
-      # Luminance of that color is capped at 0.5.
-      #
-      colorify = x ->
-        r, g, b = take 3 $ (md5 $ x.encode 'utf-8').digest!
-        m = min 0 (127 - 0.299 * r - 0.587 * g - 0.114 * b)
-        '#{:0>2x}{:0>2x}{:0>2x}'.format *: (map (bind max 0 <- round m +) (r, g, b))
-
-      view = Gtk.TextView.linkifyable
+      buffer = TextBuffer!
+      view   = Gtk.TextView.linkifyable
         editable:       False
         cursor_visible: False
+        buffer:         buffer
         wrap_mode:      Gtk.WrapMode.WORD
-
-      buffer = view.props.buffer
-      time      = buffer.tag foreground: '#777777'
-      highlight = buffer.tag foreground: '#990011'
-      text      = buffer.tag foreground: '#333333'
-      system    = buffer.tag foreground: '#dd4400' style:  Pango.Style.ITALIC
-      ntag = n -> buffer.tag ('n#' + n) foreground: (colorify n) weight: Pango.Weight.BOLD
-      mtag = n -> buffer.tag ('m#' + n) foreground: (colorify n) style:  Pango.Style.ITALIC
-
-      buffer.emotes = dict'
-        ':)',  'face-smile'
-        ':-)', 'face-smile'
-        ':D',  'face-laugh'
-        ':-D', 'face-laugh'
-        ':(',  'face-sad'
-        ':-(', 'face-sad'
-        ":'(", 'face-crying'
-        ':|',  'face-plain'
-        ':-|', 'face-plain'
-        ':<',  'face-worried'
 
       online = set!
 
       presence.append $ x -> switch
         x.type == 'error' and x.nick == self.muc.ourNicks !! x.room =
-          buffer.append (strftime '\n%H:%M:%S *** ') time
-          buffer.append message system where message = switch
-            x.error == 'conflict'              = 'Nickname {.nick} already taken, enter a new one.'.format x
-            x.error == 'forbidden'             = 'You are banned from this room.'
-            x.error == 'not-allowed'           = "Couldn't create a new room."
-            x.error == 'item-not-found'        = 'This room is locked.'
-            x.error == 'not-authorized'        = 'Password required. Know one?'
-            x.error == 'service-unavailable'   = 'This room is overcrowded.'
-            x.error == 'registration-required' = 'Not a member of this room.'
-            True = 'Unknown error: {.error}.'.format x
+          buffer.append_muc_error x.error x.nick
 
         x.type == 'unavailable' and x.nick in online =
-          buffer.append (strftime '\n%H:%M:%S −') time
-          buffer.append x.nick $ ntag x.nick
+          buffer.append_muc_offline x.nick
           online.remove x.nick
 
         not (x.nick in online) and x.type != 'error' =
-          buffer.append (strftime '\n%H:%M:%S +') time
-          buffer.append x.nick $ ntag x.nick
+          buffer.append_muc_online x.nick
           online.add x.nick
 
       message.append x ->
-        x.time = strftime '\n%H:%M:%S '
-
-        switch
-          x.subject =
-            buffer.append  x.time time
-            buffer.append  x.nick system
-            buffer.append  ' has set the subject to: ' system
-            buffer.linkify x.subject system
-
-          x.nick == '' =  # Server-issued message.
-            buffer.append  x.time time
-            buffer.linkify x.body system
-
-          x.body.startswith '/me ' =  # Self-referencing message.
-            buffer.append   x.time                    time
-            buffer.append  (x.nick + ' ')           $ mtag x.nick
-            buffer.linkify (x.body !! slice 4 None) $ mtag x.nick
-
-          self.muc.ourNicks !! room in x.body =  # Highlighted message.
-            buffer.append  x.time   highlight
-            buffer.append  x.nick $ ntag x.nick
-            buffer.append  ': '     time
-            buffer.linkify x.body   text
-
-          True =  # Boring stuff you shouldn't read.
-            buffer.append  x.time   time
-            buffer.append  x.nick $ ntag x.nick
-            buffer.append  ': '     time
-            buffer.linkify x.body   text
+        buffer.append_muc_message x.body x.nick x.subject (self.muc.ourNicks !! room in x.body)
 
     Gtk.Frame.scrollable roster vexpand: True where
 
@@ -137,12 +65,16 @@ MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned
       roster.append_column $ Gtk.TreeViewColumn '' Gtk.CellRendererText!   text: 0
 
   Gtk.Frame.scrollable entry hexpand: True where
+    # send' :: TextBuffer -> ()
+    # send  :: TextBuffer -> ()
+    send' = b -> ()
     send  = b -> b.set_text '' where send' b
-    send' = b -> False
 
     presence.append $ x -> switch
       x.nick != self.muc.ourNicks !! x.room = False
+      # Allow to send messages after successfully joining the MUC.
       x.type != 'error' = send' = b -> self.send_message room b.props.text mtype: 'groupchat'
+      # On certain errors, this field may act differently.
       x.error == 'conflict'       = send' = b -> self.muc.joinMUC x.room b.props.text maxhistory: '20'
       x.error == 'not-authorized' = send' = b -> self.muc.joinMUC x.room x.nick password: b.props.text maxhistory: '20'
 
@@ -155,5 +87,3 @@ MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned
       ev.keyval == Gdk.KEY_Return = True where send w.props.buffer
       ev.keyval == Gdk.KEY_Tab    = True where w.props.buffer.autocomplete
         map (+ ', ') $ self.muc.rooms !! room
-
-    presence initstanza if initstanza :: Presence else message initstanza
