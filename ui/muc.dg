@@ -5,6 +5,8 @@ import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
 import '/gi/repository/Pango'
 
+import '/sleekxmpp/Presence'
+
 import '../gtktools/wsignals'
 
 
@@ -54,12 +56,24 @@ MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned
       online = set!
 
       presence.append $ x -> switch
-        x.type == 'unavailable' =
+        x.type == 'error' and x.nick == self.muc.ourNicks !! x.room =
+          buffer.append (strftime '\n%H:%M:%S *** ') time
+          buffer.append message system where message = switch
+            x.error == 'conflict'              = 'Nickname {.nick} already taken, enter a new one.'.format x
+            x.error == 'forbidden'             = 'You are banned from this room.'
+            x.error == 'not-allowed'           = "Couldn't create a new room."
+            x.error == 'item-not-found'        = 'This room is locked.'
+            x.error == 'not-authorized'        = 'Password required. Know one?'
+            x.error == 'service-unavailable'   = 'This room is overcrowded.'
+            x.error == 'registration-required' = 'Not a member of this room.'
+            True = 'Unknown error: {.error}.'.format x
+
+        x.type == 'unavailable' and x.nick in online =
           buffer.append (strftime '\n%H:%M:%S −') time
           buffer.append x.nick $ ntag x.nick
           online.remove x.nick
 
-        not (x.nick in online) =
+        not (x.nick in online) and x.type != 'error' =
           buffer.append (strftime '\n%H:%M:%S +') time
           buffer.append x.nick $ ntag x.nick
           online.add x.nick
@@ -123,11 +137,14 @@ MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned
       roster.append_column $ Gtk.TreeViewColumn '' Gtk.CellRendererText!   text: 0
 
   Gtk.Frame.scrollable entry hexpand: True where
-    # send :: TextBuffer -> bool
-    #
-    # Send a message to the active room, return True.
-    #
-    send = b -> b.set_text '' where self.send_message room b.props.text mtype: 'groupchat'
+    send  = b -> b.set_text '' where send' b
+    send' = b -> False
+
+    presence.append $ x -> switch
+      x.nick != self.muc.ourNicks !! x.room = False
+      x.type != 'error' = send' = b -> self.send_message room b.props.text mtype: 'groupchat'
+      x.error == 'conflict'       = send' = b -> self.muc.joinMUC x.room b.props.text maxhistory: '20'
+      x.error == 'not-authorized' = send' = b -> self.muc.joinMUC x.room x.nick password: b.props.text maxhistory: '20'
 
     entry = Gtk.TextView editable: True wrap_mode: Gtk.WrapMode.WORD
     entry.connect 'key-press-event' $ (w ev) -> switch
@@ -138,3 +155,5 @@ MUCWidget = (self room initstanza) -> wsignals $ (message presence) -> Gtk.Paned
       ev.keyval == Gdk.KEY_Return = True where send w.props.buffer
       ev.keyval == Gdk.KEY_Tab    = True where w.props.buffer.autocomplete
         map (+ ', ') $ self.muc.rooms !! room
+
+    presence initstanza if initstanza :: Presence else message initstanza
