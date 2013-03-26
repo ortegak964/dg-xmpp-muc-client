@@ -97,8 +97,8 @@ TextBuffer = inherit Gtk.TextBuffer $
 
     body.startswith '/me ' =
       self.append_time highlight
-      self.append  (nick + ' ')           $ mtag nick
-      self.linkify (body !! slice 4 None) $ mtag nick
+      self.append  (nick + ' ')           $ self.mtag nick
+      self.linkify (body !! slice 4 None) $ self.mtag nick
 
     True =
       self.append_time highlight
