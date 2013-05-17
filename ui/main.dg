@@ -17,35 +17,31 @@ MainWindow = (username password rooms) -> wnd where
   self = None
 
   wnd = Gtk.Window.with tabs where
+    signals = dict!
+
     tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
     tabs.set_scrollable True
 
-    nums = list' None
-    wgts = dict!
-
     add_page = (Type target onquit source) ->
-      onmessage  = Signal!
-      onpresence = Signal!
-      wgts !! target = w = Type self target onmessage onpresence
-      w.message  = onmessage
-      w.presence = onpresence
-      onmessage.emit source if source :: Message else onpresence.emit source
+      signals !! (Type, target) = dict
+        onmessage:  (onmsg = Signal!)
+        onpresence: (onprs = Signal!)
 
-      nums.append target
-      n = tabs.append_page w grid where
+      w = Type self target onmsg onprs
+      w.show_all!
+
+      tabs.set_current_page $ tabs.append_page w grid where
         close  = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
         button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
         button.connect 'clicked' _ ->
           onquit target
-          tabs.remove_page $ nums.index target
-          nums !!~ nums.index target
-          wgts.pop target
+          tabs.remove_page $ tabs.page_num w
+          signals.pop (Type, target)
 
         grid = Gtk.Grid.with (Gtk.Label $ str target) button
         grid.show_all!
 
-      w.show_all!
-      tabs.set_current_page n
+      onmsg.emit source if source :: Message else onprs.emit source
 
     leave_muc = room ->
       self.muc.leaveMUC room (self.muc.ourNicks !! room)
@@ -53,15 +49,15 @@ MainWindow = (username password rooms) -> wnd where
     login = LoginWidget username password rooms client ->
       self = client
       self.add_event_handler 'message' $ delegate $ m -> switch
-        m.from in wgts = (wgts !! m.from).message.emit m
-        m.room in wgts = (wgts !! m.room).message.emit m
-        m.type == 'groupchat' = add_page MUCWidget m.room leave_muc m
+        (ChatWidget, m.from) in signals = (signals !! (ChatWidget, m.from) !! 'onmessage').emit m
+        (MUCWidget,  m.room) in signals = (signals !! (MUCWidget,  m.room) !! 'onmessage').emit m
+        m.type == 'groupchat' = add_page MUCWidget  m.room leave_muc m
         m.type == 'chat'      = add_page ChatWidget m.from _ -> _ m
         m.type == 'normal'    = add_page ChatWidget m.from _ -> _ m
 
       self.add_event_handler 'presence' $ delegate $ p -> switch
-        p.from in wgts = (wgts !! p.from).presence.emit p
-        p.room in wgts = (wgts !! p.room).presence.emit p
+        (ChatWidget, p.from) in signals = (signals !! (ChatWidget, p.from) !! 'onpresence').emit p
+        (MUCWidget,  p.room) in signals = (signals !! (MUCWidget,  p.room) !! 'onpresence').emit p
         p.room in self.muc.ourNicks = add_page MUCWidget p.room leave_muc p
 
       self.process! if self.connect!
