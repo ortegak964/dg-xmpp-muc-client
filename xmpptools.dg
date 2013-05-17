@@ -26,20 +26,3 @@ Presence.error  = property $ !! 'condition' <- !! 'error'
 # Alias for `self.plugin !! 'xep_0045'`.
 #
 ClientXMPP.muc = property $ !! 'xep_0045' <- `getattr` 'plugin'
-
-
-# associate :: (list, str, * -> a, **) -> ()
-#
-# Subscribe to an event, add info about it to some list.
-#
-ClientXMPP.associate = (self data name f **: k) ->
-  self.add_event_handler name f **: k
-  data.append (name, f)
-
-
-# dissociate :: list -> ()
-#
-# Unsubscribe from all events in a list.
-#
-ClientXMPP.dissociate = (self data) ->
-  for data (name, f) -> (self.del_event_handler name f)
