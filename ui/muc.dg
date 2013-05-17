@@ -2,10 +2,9 @@ import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
 
 import 'theme/TextBuffer'
-import '../gtktools/wsignals'
 
 
-MUCWidget = (self room) -> wsignals $ (message presence) -> Gtk.Paned.with
+MUCWidget = (self room onmessage onpresence) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Paned.with
@@ -22,7 +21,7 @@ MUCWidget = (self room) -> wsignals $ (message presence) -> Gtk.Paned.with
 
       online = set!
 
-      presence.append $ x -> switch
+      onpresence.connect $ x -> switch
         x.type == 'error' and x.nick == self.muc.ourNicks !! x.room =
           buffer.append_muc_error x.error x.nick
 
@@ -34,7 +33,7 @@ MUCWidget = (self room) -> wsignals $ (message presence) -> Gtk.Paned.with
           buffer.append_muc_online x.nick
           online.add x.nick
 
-      message.append x ->
+      onmessage.connect x ->
         buffer.append_muc_message x.body x.nick x.subject (self.muc.ourNicks !! room in x.body)
 
     Gtk.Frame.scrollable roster vexpand: True where
@@ -53,7 +52,7 @@ MUCWidget = (self room) -> wsignals $ (message presence) -> Gtk.Paned.with
         model = Gtk.ListStore str str
         model.set_sort_column_id 0 Gtk.SortType.ASCENDING
 
-        presence.append p ->
+        onpresence.connect p ->
           # 1. Remove the old entry.
           for (model.find p.nick 0) (model !!~)
           # 2. Add the same entry.
@@ -70,7 +69,7 @@ MUCWidget = (self room) -> wsignals $ (message presence) -> Gtk.Paned.with
     send' = b -> ()
     send  = b -> b.set_text '' where send' b
 
-    presence.append $ x -> switch
+    onpresence.connect $ x -> switch
       x.nick != self.muc.ourNicks !! x.room = False
       # Allow to send messages after successfully joining the MUC.
       x.type != 'error' = send' = b -> self.send_message room b.props.text mtype: 'groupchat'

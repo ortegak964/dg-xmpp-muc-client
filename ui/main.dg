@@ -8,6 +8,11 @@ import 'chat/ChatWidget'
 import 'login/LoginWidget'
 
 
+Signal = inherit list $
+  emit    = (self *: a **: k) -> exhaust $ map f -> (f *: a **: k) self
+  connect = list.append
+
+
 MainWindow = (username password rooms) -> wnd where
   self = None
 
@@ -19,8 +24,12 @@ MainWindow = (username password rooms) -> wnd where
     wgts = dict!
 
     add_page = (Type target onquit source) ->
-      wgts !! target = w = Type self target
-      w.message source if source :: Message else w.presence source
+      onmessage  = Signal!
+      onpresence = Signal!
+      wgts !! target = w = Type self target onmessage onpresence
+      w.message  = onmessage
+      w.presence = onpresence
+      onmessage.emit source if source :: Message else onpresence.emit source
 
       nums.append target
       n = tabs.append_page w grid where
@@ -44,15 +53,15 @@ MainWindow = (username password rooms) -> wnd where
     login = LoginWidget username password rooms client ->
       self = client
       self.add_event_handler 'message' $ delegate $ m -> switch
-        m.from in wgts = (wgts !! m.from).message m
-        m.room in wgts = (wgts !! m.room).message m
+        m.from in wgts = (wgts !! m.from).message.emit m
+        m.room in wgts = (wgts !! m.room).message.emit m
         m.type == 'groupchat' = add_page MUCWidget m.room leave_muc m
         m.type == 'chat'      = add_page ChatWidget m.from _ -> _ m
         m.type == 'normal'    = add_page ChatWidget m.from _ -> _ m
 
       self.add_event_handler 'presence' $ delegate $ p -> switch
-        p.from in wgts = (wgts !! p.from).presence p
-        p.room in wgts = (wgts !! p.room).presence p
+        p.from in wgts = (wgts !! p.from).presence.emit p
+        p.room in wgts = (wgts !! p.room).presence.emit p
         p.room in self.muc.ourNicks = add_page MUCWidget p.room leave_muc p
 
       self.process! if self.connect!

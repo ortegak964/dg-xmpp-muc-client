@@ -2,10 +2,9 @@ import '/gi/repository/Gdk'
 import '/gi/repository/Gtk'
 
 import 'theme/TextBuffer'
-import '../gtktools/wsignals'
 
 
-ChatWidget = (self target) -> wsignals $ (message presence) -> Gtk.Paned.with
+ChatWidget = (self target onmessage onpresence) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Frame.scrollable view hexpand: True vexpand: True auto_rewind: True where
@@ -16,7 +15,7 @@ ChatWidget = (self target) -> wsignals $ (message presence) -> Gtk.Paned.with
       buffer:         buffer
       wrap_mode:      Gtk.WrapMode.WORD
 
-    message.append x ->
+    onmessage.connect x ->
       buffer.append_chat_message x.body (x.to == target)
 
   Gtk.Frame.scrollable entry hexpand: True where
