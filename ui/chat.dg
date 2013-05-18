@@ -22,7 +22,7 @@ ChatWidget = (self target onmessage onpresence) -> Gtk.Paned.with
     send = b -> b.set_text '' where
       msg = self.make_message target b.props.text mtype: 'normal'
       msg.send!
-      message msg
+      onmessage msg
 
     entry = Gtk.TextView editable: True wrap_mode: Gtk.WrapMode.WORD
     entry.connect 'key-press-event' $ (w ev) -> switch
