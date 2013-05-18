@@ -19,19 +19,9 @@ MUCWidget = (self room onmessage onpresence) -> Gtk.Paned.with
         buffer:         buffer
         wrap_mode:      Gtk.WrapMode.WORD
 
-      online = set!
-
       onpresence.connect $ x -> switch
-        x.type == 'error' and x.nick == self.muc.ourNicks !! x.room =
-          buffer.append_muc_error x.error x.nick
-
-        x.type == 'unavailable' and x.nick in online =
-          buffer.append_muc_offline x.nick
-          online.remove x.nick
-
-        not (x.nick in online) and x.type != 'error' =
-          buffer.append_muc_online x.nick
-          online.add x.nick
+        x.type != 'error'                     = buffer.append_muc_status x.nick x.type
+        x.nick == self.muc.ourNicks !! x.room = buffer.append_muc_error x.error x.nick
 
       onmessage.connect x ->
         buffer.append_muc_message x.body x.nick x.subject (self.muc.ourNicks !! room in x.body)
@@ -64,8 +54,8 @@ MUCWidget = (self room onmessage onpresence) -> Gtk.Paned.with
       roster.append_column $ Gtk.TreeViewColumn '' Gtk.CellRendererText!   text: 0
 
   Gtk.Frame.scrollable entry hexpand: True where
-    # send' :: TextBuffer -> ()
-    # send  :: TextBuffer -> ()
+    # send' :: TextBuffer -> () -- actually do something with the message
+    # send  :: TextBuffer -> () -- delegate to `send'` and clear the entry field
     send' = b -> ()
     send  = b -> b.set_text '' where send' b
 

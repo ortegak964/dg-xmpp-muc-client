@@ -106,23 +106,16 @@ TextBuffer = inherit Gtk.TextBuffer $
       self.append  ': '   self.time
       self.linkify body   self.text
 
-  # append_muc_online :: str -> IO ()
+  # append_muc_status :: str -> IO ()
   #
-  # Show that someone has entered the room.
+  # Show that someone has changed their status
   #
-  append_muc_online = (self nick) ->
+  append_muc_status = (self nick ptype) ->
     self.append_time False
-    self.append '+'    self.time
-    self.append nick $ self.ntag nick
-
-  # append_muc_offline :: str -> IO ()
-  #
-  # Show that someone has left the room.
-  #
-  append_muc_offline = (self nick) ->
-    self.append_time False
-    self.append '−'    self.time
-    self.append nick $ self.ntag nick
+    self.append '>> '      self.time
+    self.append nick     $ self.ntag nick
+    self.append ' is now ' self.time
+    self.append ptype      self.time
 
   # append_muc_error :: (str, str) -> IO ()
   #
