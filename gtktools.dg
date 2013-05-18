@@ -204,6 +204,19 @@ Gtk.TextView.linkifyable = classmethod $ (cls **: k) ->
   self
 
 
+# with_key_hooks :: (*, **) -> TextView
+#
+# Create a TextView with some actions attached to keypresses.
+# Pressing the key with Shift held down bypasses all hooks.
+#
+Gtk.TextView.with_key_hooks = classmethod (cls *: hooks **: opts) ->
+  self = cls **: opts
+  self.connect 'key-press-event' $ (w ev) ->
+    ok = ~ev.state & Gdk.ModifierType.SHIFT_MASK and any (map ((ev.keyval ==) <- fst) hooks)
+    ok where for hooks (k, f) -> (f w if k == ev.keyval) if ok
+  self
+
+
 # find :: (a, int) -> iter [TreeIter]
 #
 # Find the first item in a tree model for which the `n`-th column

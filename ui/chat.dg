@@ -24,7 +24,5 @@ ChatWidget = (self target onmessage onpresence) -> Gtk.Paned.with
       msg.send!
       onmessage.emit msg
 
-    entry = Gtk.TextView editable: True wrap_mode: Gtk.WrapMode.WORD
-    entry.connect 'key-press-event' $ (w ev) -> switch
-      ev.state & Gdk.ModifierType.SHIFT_MASK = False
-      ev.keyval == Gdk.KEY_Return = True where send w.props.buffer
+    entry = Gtk.TextView.with_key_hooks editable: True wrap_mode: Gtk.WrapMode.WORD
+      Gdk.KEY_Return, w -> send w.props.buffer

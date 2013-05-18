@@ -67,12 +67,6 @@ MUCWidget = (self room onmessage onpresence) -> Gtk.Paned.with
       x.error == 'conflict'       = send' = b -> self.muc.joinMUC x.room b.props.text maxhistory: '20'
       x.error == 'not-authorized' = send' = b -> self.muc.joinMUC x.room x.nick password: b.props.text maxhistory: '20'
 
-    entry = Gtk.TextView editable: True wrap_mode: Gtk.WrapMode.WORD
-    entry.connect 'key-press-event' $ (w ev) -> switch
-      # `Return` sends the message.
-      # `Tab` autocompletes a nickname at the start of the message.
-      # Using any of these with `Shift` reverts them to their original action.
-      ev.state & Gdk.ModifierType.SHIFT_MASK = False
-      ev.keyval == Gdk.KEY_Return = True where send w.props.buffer
-      ev.keyval == Gdk.KEY_Tab    = True where w.props.buffer.autocomplete
-        map (+ ', ') $ self.muc.rooms !! room
+    entry = Gtk.TextView.with_key_hooks editable: True wrap_mode: Gtk.WrapMode.WORD
+      Gdk.KEY_Return, w -> send w.props.buffer
+      Gdk.KEY_Tab,    w -> w.props.buffer.autocomplete $ map (+ ', ') $ self.muc.rooms !! room
