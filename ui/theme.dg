@@ -85,11 +85,16 @@ TextBuffer = inherit Gtk.TextBuffer $
   # Handle a message of type 'groupchat'.
   #
   append_muc_message = (self body nick subject highlight) -> switch
-    subject =
+    subject and nick =
       self.append_time False
-      self.append  nick                        self.system
+      self.append  nick                      $ self.mtag nick
       self.append  ' has set the subject to: ' self.system
       self.linkify subject                     self.system
+
+    subject =
+      self.append_time False
+      self.append  'The topic is: ' self.system
+      self.linkify subject          self.system
 
     nick == '' =
       self.append_time highlight
