@@ -1,7 +1,8 @@
 import '/gi/repository/Gtk'
-import '/sleekxmpp/Message'
 
 import '../gtktools/delegate'
+import '../xmpptools/ClientXMPP'
+import '../xmpptools/Message'
 
 import 'muc/MUCWidget'
 import 'chat/ChatWidget'
@@ -13,8 +14,8 @@ Signal = inherit list $
   connect = list.append
 
 
-MainWindow = (username password rooms) -> wnd where
-  self = None
+MainWindow = rooms -> wnd where
+  clients = dict!
 
   wnd = Gtk.Window.with tabs where
     signals = dict!
@@ -22,8 +23,8 @@ MainWindow = (username password rooms) -> wnd where
     tabs = Gtk.Notebook show_border: False tab_pos: Gtk.PositionType.BOTTOM
     tabs.set_scrollable True
 
-    add_page = (Type target onquit source) ->
-      signals !! (Type, target) = dict
+    add_page = (self typestring Type target onquit source) ->
+      signals !! (self, typestring, target) = dict
         onmessage:  (onmsg = Signal!)
         onpresence: (onprs = Signal!)
 
@@ -34,37 +35,47 @@ MainWindow = (username password rooms) -> wnd where
         close  = Gtk.Image.new_from_stock Gtk.STOCK_CLOSE Gtk.IconSize.MENU
         button = Gtk.Button.with close focus_on_click: False relief: Gtk.ReliefStyle.NONE
         button.connect 'clicked' _ ->
-          onquit target
+          onquit self target
           tabs.remove_page $ tabs.page_num w
-          signals.pop (Type, target)
+          signals.pop (self, typestring, target)
 
         grid = Gtk.Grid.with (Gtk.Label $ str target) button
         grid.show_all!
 
       onmsg.emit source if source :: Message else onprs.emit source
 
-    leave_muc = room ->
+    leave_muc = (self room) ->
       self.muc.leaveMUC room (self.muc.ourNicks !! room)
 
-    login = LoginWidget username password rooms client ->
-      self = client
+    login = LoginWidget rooms (username password) ->
+     clients !! username if username in clients else
+      self = clients !! username = ClientXMPP username password
+      self.register_plugin 'xep_0030'
+      self.register_plugin 'xep_0045'
+      self.register_plugin 'xep_0199'
+
+      self.add_event_handler 'session_start' _ ->
+        self.get_roster!
+        self.send_presence!
+
       self.add_event_handler 'message' $ delegate $ m -> switch
-        (ChatWidget, m.from) in signals = (signals !! (ChatWidget, m.from) !! 'onmessage').emit m
-        (MUCWidget,  m.room) in signals = (signals !! (MUCWidget,  m.room) !! 'onmessage').emit m
-        m.type == 'groupchat' = add_page MUCWidget  m.room leave_muc m
-        m.type == 'chat'      = add_page ChatWidget m.from _ -> _ m
-        m.type == 'normal'    = add_page ChatWidget m.from _ -> _ m
+        (self, 'chat', m.from) in signals = (signals !! (self, 'chat', m.from) !! 'onmessage').emit m
+        (self, 'muc',  m.room) in signals = (signals !! (self, 'muc',  m.room) !! 'onmessage').emit m
+        m.type == 'groupchat' = add_page self 'muc'  MUCWidget  m.room leave_muc m
+        m.type == 'chat'      = add_page self 'chat' ChatWidget m.from (_ _) -> _ m
+        m.type == 'normal'    = add_page self 'chat' ChatWidget m.from (_ _) -> _ m
 
       self.add_event_handler 'presence' $ delegate $ p -> switch
-        (ChatWidget, p.from) in signals = (signals !! (ChatWidget, p.from) !! 'onpresence').emit p
-        (MUCWidget,  p.room) in signals = (signals !! (MUCWidget,  p.room) !! 'onpresence').emit p
-        p.room in self.muc.ourNicks = add_page MUCWidget p.room leave_muc p
+        (self, 'chat', p.from) in signals = (signals !! (self, 'chat', p.from) !! 'onpresence').emit p
+        (self, 'muc',  p.room) in signals = (signals !! (self, 'muc',  p.room) !! 'onpresence').emit p
+        p.room in self.muc.ourNicks = add_page self 'muc' MUCWidget p.room leave_muc p
 
       self.process! if self.connect!
+      self
 
     tabs.append_page login (Gtk.Label '+')
     login.show_all!
 
   wnd.connect 'delete-event' Gtk.main_quit
-  wnd.connect 'delete-event' (_ _) -> (self.disconnect! if self)
+  wnd.connect 'delete-event' (_ _) -> (for clients.values! ClientXMPP.disconnect)
   wnd.show_all!

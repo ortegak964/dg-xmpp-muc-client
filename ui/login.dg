@@ -1,40 +1,26 @@
 import '/gi/repository/Gtk'
 
-import '/sleekxmpp/ClientXMPP'
 
-import '../gtktools/delegate'
-import '../xmpptools'
-
-
-LoginWidget = (username password rooms onlogin self: None) -> Gtk.Grid.with
-
-  Gtk.Frame.group 'Login' form where
-    jidf = Gtk.Entry text: username placeholder_text: 'Jabber ID'
-    pwdf = Gtk.Entry text: password placeholder_text: 'Password' visibility: False
-    ok   = Gtk.Button 'Login'
-    form = Gtk.Grid.with jidf pwdf ok orientation: Gtk.Orientation.VERTICAL
-
-    onlogin self where
-      self = ClientXMPP username password
-      self.register_plugin 'xep_0030'
-      self.register_plugin 'xep_0045'
-      self.register_plugin 'xep_0199'
-
-      self.add_event_handler 'session_start' $ delegate _ ->
-        self.get_roster!
-        self.send_presence!
-        for rooms (room, nick, pwd) -> (self.muc.joinMUC room nick password: pwd maxhistory: '20')
-
-  Gtk.Frame.group 'Join a room' form where
-    name = Gtk.Entry placeholder_text: 'room@server'
+LoginWidget = (rooms onlogin) -> form where
+  form = Gtk.Grid.with orientation: Gtk.Orientation.VERTICAL
+    user = Gtk.Entry placeholder_text: 'Jabber ID'
+    upwd = Gtk.Entry placeholder_text: 'Password' visibility: False
+    room = Gtk.Entry placeholder_text: 'room@server'
+    rpwd = Gtk.Entry placeholder_text: 'Password' visibility: False
     nick = Gtk.Entry placeholder_text: 'Nickname'
-    pwd  = Gtk.Entry placeholder_text: 'Password' visibility: False
     ok   = Gtk.Button 'Join'
 
-    join = _ -> self.muc.joinMUC name.props.text nick.props.text password: pwd.props.text maxhistory: '20'
-    name.connect 'activate' join
-    nick.connect 'activate' join
-    pwd.connect  'activate' join
-    ok.connect   'clicked'  join
+  join = _ ->
+    self = onlogin user.props.text upwd.props.text
+    self.muc.joinMUC room.props.text nick.props.text password: rpwd.props.text maxhistory: '20'
 
-    form = Gtk.Grid.with name nick pwd ok orientation: Gtk.Orientation.VERTICAL
+  user.connect 'activate' join
+  upwd.connect 'activate' join
+  room.connect 'activate' join
+  rpwd.connect 'activate' join
+  nick.connect 'activate' join
+  ok.connect   'clicked'  join
+
+  for rooms (username, password, room', nick', pwd) ->
+    self = onlogin username password
+    self.muc.joinMUC room' nick' password: pwd maxhistory: '20'
