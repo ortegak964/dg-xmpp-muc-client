@@ -8,15 +8,13 @@ ChatWidget = (self target onmessage onpresence) -> Gtk.Paned.with
   orientation: Gtk.Orientation.VERTICAL
 
   Gtk.Frame.scrollable view hexpand: True vexpand: True auto_rewind: True where
-    buffer = TextBuffer!
-    view   = Gtk.TextView.linkifyable
+    view = Gtk.TextView.linkifyable
       editable:       False
       cursor_visible: False
-      buffer:         buffer
+      buffer:         TextBuffer!
       wrap_mode:      Gtk.WrapMode.WORD
 
-    onmessage.connect x ->
-      buffer.append_chat_message x.body (x.to == target)
+    onmessage.connect $ bind view.props.buffer.append_chat_message target
 
   Gtk.Frame.scrollable entry hexpand: True where
     send = b -> b.set_text '' where

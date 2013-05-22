@@ -1,26 +1,26 @@
 import '/gi/repository/Gtk'
 
 
-LoginWidget = (rooms onlogin) -> form where
-  form = Gtk.Grid.with orientation: Gtk.Orientation.VERTICAL
-    user = Gtk.Entry placeholder_text: 'Jabber ID'
-    upwd = Gtk.Entry placeholder_text: 'Password' visibility: False
-    room = Gtk.Entry placeholder_text: 'room@server'
-    rpwd = Gtk.Entry placeholder_text: 'Password' visibility: False
-    nick = Gtk.Entry placeholder_text: 'Nickname'
-    ok   = Gtk.Button 'Join'
+LoginDialog = getclient -> d.run! where
+  d = Gtk.Dialog title: 'Join a room'
+  d.get_content_area!.add form where
+    form = Gtk.Grid.with orientation: Gtk.Orientation.VERTICAL
+      user = Gtk.Entry placeholder_text: 'Jabber ID'
+      upwd = Gtk.Entry placeholder_text: 'Password' visibility: False
+      room = Gtk.Entry placeholder_text: 'room@server'
+      rpwd = Gtk.Entry placeholder_text: 'Password' visibility: False
+      nick = Gtk.Entry placeholder_text: 'Nickname'
+      ok   = Gtk.Button 'Join'
 
-  join = _ ->
-    self = onlogin user.props.text upwd.props.text
-    self.muc.joinMUC room.props.text nick.props.text password: rpwd.props.text maxhistory: '20'
+    join = _ ->
+      self = getclient user.props.text upwd.props.text
+      self.muc.joinMUC room.props.text nick.props.text password: rpwd.props.text maxhistory: '20'
+      d.destroy!
 
-  user.connect 'activate' join
-  upwd.connect 'activate' join
-  room.connect 'activate' join
-  rpwd.connect 'activate' join
-  nick.connect 'activate' join
-  ok.connect   'clicked'  join
-
-  for rooms (username, password, room', nick', pwd) ->
-    self = onlogin username password
-    self.muc.joinMUC room' nick' password: pwd maxhistory: '20'
+    user.connect 'activate' join
+    upwd.connect 'activate' join
+    room.connect 'activate' join
+    rpwd.connect 'activate' join
+    nick.connect 'activate' join
+    ok.connect   'clicked'  join
+  d.show_all!

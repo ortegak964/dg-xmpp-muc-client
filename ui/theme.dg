@@ -46,16 +46,24 @@ TextBuffer = inherit Gtk.TextBuffer $
     self.mtag = n -> self.tag ('m#' + n) foreground: (colorify n) style:  Pango.Style.ITALIC
 
     self.emotes = dict'
-      ':)',  'face-smile'
-      ':-)', 'face-smile'
-      ':D',  'face-laugh'
-      ':-D', 'face-laugh'
-      ':(',  'face-sad'
-      ':-(', 'face-sad'
-      ":'(", 'face-crying'
-      ':|',  'face-plain'
-      ':-|', 'face-plain'
-      ':<',  'face-worried'
+      ':)',   'face-smile'
+      ':-)',  'face-smile'
+      ':D',   'face-laugh'
+      ':-D',  'face-laugh'
+      ':(',   'face-sad'
+      ':-(',  'face-sad'
+      ":'(",  'face-crying'
+      ':|',   'face-plain'
+      ':-|',  'face-plain'
+      ':\\',  'face-uncertain'
+      ':-\\', 'face-uncertain'
+      ':/',   'face-uncertain'
+      ':-/',  'face-uncertain'
+      ':o',   'face-surprise'
+      ':-o',  'face-surprise'
+      ':<',   'face-worried'
+      '8-)',  'face-glasses'
+      '8)',   'face-glasses'
 
     None
 
@@ -63,84 +71,65 @@ TextBuffer = inherit Gtk.TextBuffer $
   #
   # Start a new line beginning with a timestamp.
   #
-  append_time = (self highlight) ->
+  append_time = (self highlight) -> True where
     self.append (strftime '\n%H:%M:%S ') (self.highlight if highlight else self.time)
 
   # append_chat_message :: (str, bool) -> IO ()
   #
   # Handle a message of type 'chat' or 'normal'.
   #
-  append_chat_message = (self body outgoing) -> switch
-    body.startswith '/me ' =
-      self.append_time False
-      self.linkify ('* ' + body !! slice 4 None) (self.senM if outgoing else self.recM)
+  append_chat_message = (self target m) -> self.append_time False and switch
+    m.body.startswith '/me ' =
+      self.linkify ('* ' + m.body !! slice 4 None) (self.senM if m.to == target else self.recM)
 
     True =
-      self.append_time False
-      self.append ('→' if outgoing else '←') (self.send if outgoing else self.recv)
-      self.linkify body self.text
+      self.append ('→' if m.to == target else '←') (self.send if m.to == target else self.recv)
+      self.linkify m.body self.text
 
   # append_muc_message :: (str, str, str, bool) -> IO ()
   #
   # Handle a message of type 'groupchat'.
   #
-  append_muc_message = (self body nick subject highlight) -> switch
-    subject and nick =
-      self.append_time False
-      self.append  nick                      $ self.mtag nick
-      self.append  ' has set the subject to: ' self.system
-      self.linkify subject                     self.system
+  append_muc_message = (self highlight m) -> self.append_time (highlight m.body) and switch
+    m.subject and m.nick =
+      self.append  m.nick                  $ self.mtag m.nick
+      self.append  ' has set the topic to: ' self.system
+      self.linkify m.subject                 self.system
 
-    subject =
-      self.append_time False
+    m.subject =
       self.append  'The topic is: ' self.system
-      self.linkify subject          self.system
+      self.linkify m.subject        self.system
 
-    nick == '' =
-      self.append_time highlight
-      self.linkify body self.system
+    m.nick == '' =
+      self.linkify m.body self.system
 
-    body.startswith '/me ' =
-      self.append_time highlight
-      self.append  (nick + ' ')           $ self.mtag nick
-      self.linkify (body !! slice 4 None) $ self.mtag nick
+    m.body.startswith '/me ' =
+      self.append  (m.nick + ' ')           $ self.mtag nick
+      self.linkify (m.body !! slice 4 None) $ self.mtag nick
 
     True =
-      self.append_time highlight
-      self.append  nick $ self.ntag nick
-      self.append  ': '   self.time
-      self.linkify body   self.text
+      self.append  m.nick $ self.ntag m.nick
+      self.append  ': '     self.time
+      self.linkify m.body   self.text
 
   # append_muc_status :: str -> IO ()
   #
   # Show that someone has changed their status
   #
-  append_muc_status = (self nick ptype) ->
-    self.append_time False
-    self.append '>> '      self.time
-    self.append nick     $ self.ntag nick
-    self.append ' is now ' self.time
-    self.append ptype      self.time
-
-  # append_muc_error :: (str, str) -> IO ()
-  #
-  # Show that something has gone wrong.
-  #
-  append_muc_error = (self error nick) ->
-    self.append_time False
-    self.append '*** ' self.time
-    self.append (self.muc_error_message error nick) self.system
-
-  # muc_error_message :: (str, str) -> str
-  #
-  # Generate an error message for a presence of type "error".
-  #
-  muc_error_message = (self error nick) -> switch
-    error == 'conflict'              = 'Nickname {} already taken, enter a new one.'.format nick
-    error == 'forbidden'             = 'You are banned from this room.'
-    error == 'not-allowed'           = "Couldn't create a new room."
-    error == 'item-not-found'        = 'This room is locked.'
-    error == 'not-authorized'        = 'Password required. Know one?'
-    error == 'service-unavailable'   = 'This room is overcrowded.'
-    error == 'registration-required' = 'Not a member of this room.'
-    True = 'Unknown error: {}.'.format error
+  append_muc_status = (self p) -> self.append_time False and switch
+    p.type == 'error' =
+      self.append '*** ' self.time
+      self.append text   self.system where text = switch
+        p.error == 'conflict'              = 'Nickname {} already taken, enter a new one.'.format p.nick
+        p.error == 'forbidden'             = 'You are banned from this room.'
+        p.error == 'not-allowed'           = "Couldn't create a new room."
+        p.error == 'item-not-found'        = 'This room is locked.'
+        p.error == 'not-authorized'        = 'Password required. Know one?'
+        p.error == 'service-unavailable'   = 'This room is overcrowded.'
+        p.error == 'registration-required' = 'Not a member of this room.'
+        True = 'Unknown error: {}.'.format p.error
+    True =
+      self.append '>> '      self.time
+      self.append p.nick   $ self.ntag p.nick
+      self.append ' is now ' self.time
+      self.append p.type     self.time

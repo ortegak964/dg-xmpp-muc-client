@@ -1,6 +1,7 @@
 import '/re'
 import '/itertools/cycle'
 
+import '/gi/repository/Gio'
 import '/gi/repository/Gtk'
 import '/gi/repository/Gdk'
 import '/gi/repository/Pango'
@@ -9,6 +10,16 @@ import '/gi/repository/GObject'
 import '/gi/repository/GdkPixbuf/Pixbuf'
 
 GObject.threads_init!
+
+
+# with :: (str, (Action, object) -> ()) -> Action
+#
+# Not a widget, but an action with a name and a callback.
+#
+Gio.Action.with = classmethod (cls name action) ->
+  self = cls name: name
+  self.connect 'activate' action
+  self
 
 
 # at_bottom :: bool

@@ -1,8 +1,55 @@
+import '/sys/argv'
+
 import '/gi/repository/Gtk'
+import '/gi/repository/Gio'
+
+import 'xmpptools/ClientXMPP'
 
 import 'ui/main/MainWindow'
+import 'ui/login/LoginDialog'
 
-wnd = MainWindow $ list'
-  'jid.example.com', 'password', 'room@conference.example.com', 'nick', 'password or None'
 
-Gtk.main!
+clients = dict!
+client  = (username password) ->
+ clients !! username if username in clients else
+  self = clients !! username = ClientXMPP username password
+  self.register_plugin 'xep_0030'
+  self.register_plugin 'xep_0045'
+  self.register_plugin 'xep_0199'
+
+  self.add_event_handler 'session_start' _ -> self.send_presence!
+  self.process! if self.connect!
+
+  for app.get_windows! $ w -> w.onclient self
+  self
+
+
+app = Gtk.Application!
+app.connect 'startup' self ->
+  builder = Gtk.Builder!
+  builder.add_from_string '''
+    <interface>
+      <menu id='app-menu'>
+        <section>
+          <item>
+            <attribute name='label' translatable='yes'>_Join a room...</attribute>
+            <attribute name='action'>app.join</attribute>
+          </item>
+          <item>
+            <attribute name='label' translatable='yes'>_Quit</attribute>
+            <attribute name='action'>app.quit</attribute>
+          </item>
+        </section>
+      </menu>
+    </interface>
+  '''
+
+  app.add_action $ Gio.SimpleAction.with 'join' $ (_ _) -> LoginDialog client
+  app.add_action $ Gio.SimpleAction.with 'quit' $ (_ _) -> for app.get_windows! Gtk.Window.destroy
+  app.set_app_menu $ builder.get_object 'app-menu'
+
+app.connect 'activate' self ->
+  wnd = MainWindow app client $ list!
+  wnd.show_all!
+
+exit $ app.run argv

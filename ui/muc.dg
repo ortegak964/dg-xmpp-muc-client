@@ -12,19 +12,14 @@ MUCWidget = (self room onmessage onpresence) -> Gtk.Paned.with
     vexpand: True
 
     Gtk.Frame.scrollable view hexpand: True vexpand: True auto_rewind: True where
-      buffer = TextBuffer!
-      view   = Gtk.TextView.linkifyable
+      view = Gtk.TextView.linkifyable
         editable:       False
         cursor_visible: False
-        buffer:         buffer
+        buffer:         TextBuffer!
         wrap_mode:      Gtk.WrapMode.WORD
 
-      onpresence.connect $ x -> switch
-        x.type != 'error'                     = buffer.append_muc_status x.nick x.type
-        x.nick == self.muc.ourNicks !! x.room = buffer.append_muc_error x.error x.nick
-
-      onmessage.connect x ->
-        buffer.append_muc_message x.body x.nick x.subject (self.muc.ourNicks !! room in x.body)
+      onpresence.connect view.props.buffer.append_muc_status
+      onmessage.connect $ bind view.props.buffer.append_muc_message t -> (self.muc.ourNicks !! room in t)
 
     Gtk.Frame.scrollable roster vexpand: True where
 
