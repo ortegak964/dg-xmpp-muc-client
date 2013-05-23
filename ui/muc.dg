@@ -18,7 +18,7 @@ MUCWidget = (self room onmessage onpresence) -> Gtk.Paned.with
         buffer:         TextBuffer!
         wrap_mode:      Gtk.WrapMode.WORD
 
-      onpresence.connect view.props.buffer.append_muc_status
+      onpresence.connect       view.props.buffer.append_muc_status
       onmessage.connect $ bind view.props.buffer.append_muc_message t -> (self.muc.ourNicks !! room in t)
 
     Gtk.Frame.scrollable roster vexpand: True where

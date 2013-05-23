@@ -15,6 +15,7 @@ ChatWidget = (self target onmessage onpresence) -> Gtk.Paned.with
       wrap_mode:      Gtk.WrapMode.WORD
 
     onmessage.connect $ bind view.props.buffer.append_chat_message target
+    onpresence.connect       view.props.buffer.append_muc_status
 
   Gtk.Frame.scrollable entry hexpand: True where
     send = b -> b.set_text '' where
