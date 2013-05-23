@@ -1,13 +1,15 @@
 import '/sys/argv'
 
-import '/gi/repository/Gtk'
-import '/gi/repository/Gio'
-
+import 'gtktools/Gtk'
+import 'gtktools/Gio'
 import 'xmpptools/ClientXMPP'
 
 import 'ui/main/MainWindow'
 import 'ui/login/LoginDialog'
 
+
+rooms = list'
+  'jid@example.com', 'password', 'room@conference.example.com', 'nick', 'password or None'
 
 clients = dict!
 client  = (username password) ->
@@ -49,7 +51,12 @@ app.connect 'startup' self ->
   app.set_app_menu $ builder.get_object 'app-menu'
 
 app.connect 'activate' self ->
-  wnd = MainWindow app client $ list!
+  wnd = MainWindow app
   wnd.show_all!
 
-exit $ app.run argv
+  for rooms (username, password, room, nick, pwd) ->
+    self = client username password
+    self.muc.joinMUC room nick password: pwd maxhistory: '20'
+
+app.run argv
+for clients.values! ClientXMPP.disconnect
