@@ -104,8 +104,8 @@ TextBuffer = inherit Gtk.TextBuffer $
       self.linkify m.body self.system
 
     m.body.startswith '/me ' =
-      self.append  (m.nick + ' ')           $ self.mtag nick
-      self.linkify (m.body !! slice 4 None) $ self.mtag nick
+      self.append  (m.nick + ' ')           $ self.mtag m.nick
+      self.linkify (m.body !! slice 4 None) $ self.mtag m.nick
 
     True =
       self.append  m.nick $ self.ntag m.nick
