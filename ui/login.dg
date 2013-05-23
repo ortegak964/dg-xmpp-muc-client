@@ -1,4 +1,4 @@
-import '/gi/repository/Gtk'
+import '../gtktools/Gtk'
 
 
 LoginDialog = getclient -> d.run! where

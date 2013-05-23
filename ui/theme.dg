@@ -1,8 +1,8 @@
 import '/hashlib/md5'
 import '/time/strftime'
 
-import '/gi/repository/Gtk'
-import '/gi/repository/Pango'
+import '../gtktools/Gtk'
+import '../gtktools/Pango'
 
 
 # colorify :: str -> str

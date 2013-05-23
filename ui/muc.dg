@@ -1,5 +1,5 @@
-import '/gi/repository/Gdk'
-import '/gi/repository/Gtk'
+import '../gtktools/Gdk'
+import '../gtktools/Gtk'
 
 import 'theme/TextBuffer'
 
